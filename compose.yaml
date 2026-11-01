@@ -26,7 +26,7 @@ services:
     mysql:
         image: 'mysql:8.4'
         ports:
-            - '${FORWARD_DB_PORT:-3306}:3306'
+            - '127.0.0.1:${FORWARD_DB_PORT:-3308}:3306'
         environment:
             MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
             MYSQL_ROOT_HOST: '%'
@@ -48,6 +48,18 @@ services:
                 - '-p${DB_PASSWORD}'
             retries: 3
             timeout: 5s
+    phpmyadmin:
+        image: 'phpmyadmin:5.2-apache'
+        ports:
+            - '127.0.0.1:${PHPMYADMIN_PORT:-8089}:80'
+        environment:
+            PMA_HOST: mysql
+            PMA_PORT: 3306
+        depends_on:
+            mysql:
+                condition: service_healthy
+        networks:
+            - sail
 networks:
     sail:
         driver: bridge
