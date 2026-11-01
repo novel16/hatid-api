@@ -1,58 +1,127 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Hatid API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel 13.39 / PHP 8.4 / Sanctum 4.3.3. This API serves the rider PWA and the separate admin app.
 
-## About Laravel
+## Architecture and coding standards
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Controllers coordinate HTTP only. Form Requests validate inputs; focused services under app/Services/Auth handle accounts, credentials, token lifecycle and passwords. API Resources explicitly select public response fields. TokenCollection adds pagination without exposing token hashes.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+UserRole is a backed enum. Every protected route requires a valid personal access token, the correct database role and the matching token ability. A role change does not upgrade an old token. Public registration can create riders only.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+The API is session-free: pass Authorization: Bearer, omit cookies, and do not call /sanctum/csrf-cookie. Sanctum stateful domains and session fallback guards are empty; its cookie endpoint is disabled. Tokens are hashed, stored in the database, expire and can be revoked. They are not self-contained JWTs.
 
-## Learning Laravel
+## Local setup
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+The existing Sail stack serves the API at http://localhost (port 80) and phpMyAdmin at http://localhost:8089. MySQL uses mysql:3306 inside Compose; a host database client uses 127.0.0.1:3308.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+From /home/novel/projects/hatid/api:
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+~~~bash
+./vendor/bin/sail up -d
+./vendor/bin/sail artisan migrate
+./vendor/bin/sail artisan app:create-admin
+~~~
 
-## Agentic Development
+The last command is interactive: name, email, hidden password and confirmation. It does not accept passwords as CLI arguments, create default credentials or promote an existing rider. No admin account has been silently provisioned. DatabaseSeeder creates no default users.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+New passwords require at least 12 characters, upper/lowercase and a number, with a 72-byte maximum compatible with bcrypt. Passwords support Unicode within that byte limit.
 
-```bash
-composer require laravel/boost --dev
+## Routes
 
-php artisan boost:install
-```
+Public endpoints:
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+| Method | Path | Inputs |
+|---|---|---|
+| POST | /api/v1/auth/register | name, email, password, password_confirmation, device_name |
+| POST | /api/v1/auth/login | email, password, device_name; riders only |
+| POST | /api/v1/admin/auth/login | email, password, device_name; admins only |
+| POST | /api/v1/auth/forgot-password | email; shared by both clients |
+| POST | /api/v1/auth/reset-password | email, token, password, password_confirmation; shared |
 
-## Contributing
+For protected routes, use /api/v1/auth for riders or /api/v1/admin/auth for admins:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Method | Suffix | Behavior |
+|---|---|---|
+| GET | /me | Current user through UserResource |
+| POST | /logout | Revoke the current device token |
+| POST | /logout-all | Revoke every token owned by the current account |
+| GET | /tokens?page=1&per_page=15 | Owned, unexpired tokens; maximum 100 per page |
+| DELETE | /tokens/{id} | Revoke an owned token; foreign/unknown IDs return 404 |
+| PUT | /password | current_password, password, password_confirmation; revoke all devices |
 
-## Code of Conduct
+Login/register returns:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+~~~json
+{
+  "data": {
+    "user": {
+      "id": 1,
+      "name": "Example Rider",
+      "email": "rider@example.com",
+      "role": "rider",
+      "email_verified_at": null,
+      "created_at": "2026-11-01T00:00:00.000000Z"
+    },
+    "access_token": "<returned once>",
+    "token_type": "Bearer",
+    "expires_at": "<UTC timestamp>"
+  }
+}
+~~~
 
-## Security Vulnerabilities
+Only login and registration reveal a token's plaintext secret. Resources never return password hashes, remember tokens or token hashes. Auth responses use Cache-Control: no-store.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Example browser request:
 
-## License
+~~~javascript
+const response = await fetch("http://localhost/api/v1/auth/login", {
+  method: "POST",
+  credentials: "omit",
+  headers: { Accept: "application/json", "Content-Type": "application/json" },
+  body: JSON.stringify({
+    email: "your-rider@example.com",
+    password: "your-password",
+    device_name: "Chrome",
+  }),
+});
+const result = await response.json();
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+await fetch("http://localhost/api/v1/auth/me", {
+  credentials: "omit",
+  headers: {
+    Accept: "application/json",
+    Authorization: "Bearer " + result.data.access_token,
+  },
+});
+~~~
+
+401 means missing/invalid/expired/revoked token; 403 means wrong role/ability; 422 includes validation errors; 429 includes Retry-After. Both clients use the same account table. This first role model gives each account one role; there is no public admin signup.
+
+## Configuration and recovery
+
+See .env.example. Defaults are explicit and configurable:
+
+- FRONTEND_URL=http://localhost:3000
+- ADMIN_URL=http://localhost:3001
+- AUTH_RIDER_TOKEN_TTL=1440 minutes
+- AUTH_ADMIN_TOKEN_TTL=60 minutes
+- CORS_ALLOWED_ORIGINS optionally overrides the two allowed client origins.
+
+CORS permits Bearer headers from both configured clients and does not allow credentialed cookies. Align client URLs/origins with deployment addresses before deployment.
+
+Expired tokens require login again; there is no JWT refresh-token flow. A daily scheduled Sanctum command prunes tokens expired for at least 24 hours when the Laravel scheduler is running.
+
+Password recovery always returns the same public response for known/unknown emails. Reset links target the rider or admin /reset-password page according to the stored account role. Successful reset/change revokes every device token. Changing a password signs out the current device too.
+
+Development currently uses MAIL_MAILER=log: reset links go to the local Laravel mail log. Configure the real mail transport for actual email delivery. Client reset pages are a separate UI concern.
+
+## Verification
+
+~~~bash
+./vendor/bin/sail composer test
+./vendor/bin/sail pint --dirty --format agent
+~~~
+
+PHPUnit uses forced SQLite :memory: databases, not the local MySQL data. Feature tests use real Bearer headers and cover both roles, session-cookie rejection, privilege escalation, token expiry/ownership/revocation, pagination/serialization, throttling/CORS, password recovery/change and admin provisioning.
+
+The repository's AGENTS.md records the ongoing coding standards. Laravel Boost was installed as a development dependency to complete the repository's required agent bootstrap; it is not part of the authentication runtime.
