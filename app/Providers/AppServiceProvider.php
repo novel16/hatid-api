@@ -11,7 +11,6 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
@@ -27,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('login', function (Request $request): array {
             $email = $request->input('email');
-            $identity = is_string($email) ? Str::lower(trim($email)) : '';
+            $identity = is_string($email) ? User::normalizeEmail($email) : '';
 
             return [
                 Limit::perMinute(30)->by('login-ip:'.$request->ip()),

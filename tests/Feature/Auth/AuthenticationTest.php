@@ -12,6 +12,35 @@ use PHPUnit\Framework\Attributes\DataProvider;
 
 class AuthenticationTest extends AuthTestCase
 {
+    /** @return array<string, array{string, string, array<string>}> */
+    public static function requiredAuthFields(): array
+    {
+        return [
+            'registration' => ['POST', '/api/v1/auth/register', ['name', 'email', 'password', 'device_name']],
+            'rider login' => ['POST', '/api/v1/auth/login', ['email', 'password', 'device_name']],
+            'admin login' => ['POST', '/api/v1/admin/auth/login', ['email', 'password', 'device_name']],
+            'password recovery' => ['POST', '/api/v1/auth/forgot-password', ['email']],
+            'password reset' => ['POST', '/api/v1/auth/reset-password', ['email', 'token', 'password']],
+            'rider password change' => ['PUT', '/api/v1/auth/password', ['current_password', 'password']],
+            'admin password change' => ['PUT', '/api/v1/admin/auth/password', ['current_password', 'password']],
+        ];
+    }
+
+    /** @param array<string> $fields */
+    #[DataProvider('requiredAuthFields')]
+    public function test_each_auth_action_keeps_its_required_fields(string $method, string $path, array $fields): void
+    {
+        $token = null;
+
+        if ($method === 'PUT') {
+            $role = str_contains($path, '/admin/') ? UserRole::Admin : UserRole::Rider;
+            $token = $this->token($this->account($role));
+        }
+
+        $this->api($method, $path, token: $token)
+            ->assertUnprocessable()->assertJsonValidationErrors($fields);
+    }
+
     public function test_registration_returns_a_rider_and_a_hashed_expiring_bearer_token(): void
     {
         $this->travelTo(now()->startOfSecond());

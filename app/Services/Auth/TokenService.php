@@ -17,11 +17,15 @@ final class TokenService
     {
         $lifetime = max(1, (int) config('auth_tokens.lifetime_minutes.'.$user->role->value));
 
-        return $user->createToken(
+        $token = $user->createToken(
             $deviceName,
             [$user->role->tokenAbility()],
             now()->addMinutes($lifetime),
         );
+
+        $token->accessToken->setRelation('tokenable', $user);
+
+        return $token;
     }
 
     /** @return LengthAwarePaginator<int, PersonalAccessToken> */

@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services\Auth;
 
-use App\Data\AuthSession;
 use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Illuminate\Support\Timebox;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\NewAccessToken;
 use SensitiveParameter;
 
 final class AuthService
@@ -27,11 +26,11 @@ final class AuthService
         string $email,
         #[SensitiveParameter] string $password,
         string $deviceName,
-    ): AuthSession {
-        return DB::transaction(function () use ($name, $email, $password, $deviceName): AuthSession {
+    ): NewAccessToken {
+        return DB::transaction(function () use ($name, $email, $password, $deviceName): NewAccessToken {
             $user = $this->createUser($name, $email, $password, UserRole::Rider);
 
-            return new AuthSession($user, $this->tokens->issue($user, $deviceName));
+            return $this->tokens->issue($user, $deviceName);
         });
     }
 
@@ -40,11 +39,11 @@ final class AuthService
         #[SensitiveParameter] string $password,
         string $deviceName,
         UserRole $role,
-    ): AuthSession {
-        return $this->timebox->call(function () use ($email, $password, $deviceName, $role): AuthSession {
-            return DB::transaction(function () use ($email, $password, $deviceName, $role): AuthSession {
+    ): NewAccessToken {
+        return $this->timebox->call(function () use ($email, $password, $deviceName, $role): NewAccessToken {
+            return DB::transaction(function () use ($email, $password, $deviceName, $role): NewAccessToken {
                 $user = User::query()
-                    ->where('email', Str::lower(trim($email)))
+                    ->where('email', User::normalizeEmail($email))
                     ->lockForUpdate()
                     ->first();
 
@@ -58,7 +57,7 @@ final class AuthService
                     $user->forceFill(['password' => $password])->save();
                 }
 
-                return new AuthSession($user, $this->tokens->issue($user, $deviceName));
+                return $this->tokens->issue($user, $deviceName);
             });
         }, 200_000);
     }
@@ -79,7 +78,7 @@ final class AuthService
     ): User {
         $user = new User([
             'name' => $name,
-            'email' => Str::lower(trim($email)),
+            'email' => User::normalizeEmail($email),
             'password' => $password,
         ]);
         $user->role = $role;

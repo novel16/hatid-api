@@ -9,7 +9,6 @@ use App\Rules\MaxPasswordBytes;
 use App\Services\Auth\AuthService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -30,7 +29,7 @@ class CreateAdmin extends Command
 
         $data = [
             'name' => $this->ask('Name'),
-            'email' => Str::lower(trim((string) $this->ask('Email'))),
+            'email' => User::normalizeEmail((string) $this->ask('Email')),
             'password' => $this->secret('Password'),
             'password_confirmation' => $this->secret('Confirm password'),
         ];

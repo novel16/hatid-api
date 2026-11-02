@@ -4,7 +4,21 @@ Laravel 13.39 / PHP 8.4 / Sanctum 4.3.3. This API serves the rider PWA and the s
 
 ## Architecture and coding standards
 
-Controllers coordinate HTTP only. Form Requests validate inputs; focused services under app/Services/Auth handle accounts, credentials, token lifecycle and passwords. API Resources explicitly select public response fields. TokenCollection adds pagination without exposing token hashes.
+AuthController coordinates the auth endpoints, and AuthRequest keeps their validation in one place. Focused services under app/Services/Auth handle accounts, credentials, token lifecycle and passwords. API Resources explicitly select public response fields. TokenResource::collection() uses Laravel's built-in paginated collection without exposing token hashes.
+
+The Ponytail refactor reduced the core auth implementation from 17 files / 692 lines to 8 files / 515 lines. This count covers the controller, requests, services, resources and former session DTO; security middleware, the role enum, password-byte rule, configuration, migrations and tests remain separate.
+
+Read one flow in this order:
+
+1. routes/api.php: endpoint and middleware.
+2. app/Http/Requests/Auth/AuthRequest.php: rules for the controller action and shared newPasswordRules().
+3. app/Http/Controllers/Api/V1/Auth/AuthController.php: HTTP coordination; authenticate() is shared by rider/admin login.
+4. app/Services/Auth/AuthService.php, TokenService.php or PasswordService.php: the relevant business logic.
+5. app/Http/Resources/Auth/AuthSessionResource.php, UserResource.php or TokenResource.php: controlled output.
+
+User::normalizeEmail() is reused by request validation, services, login throttling and admin provisioning. Token issuance returns Sanctum's existing NewAccessToken rather than a custom DTO; TokenService retains the issuing user on its tokenable relation so serialization uses that same account without another query.
+
+AuthRequest chooses rules by the server-side controller action. When adding or renaming an action that uses it, update the rules match and the required-fields regression cases together.
 
 UserRole is a backed enum. Every protected route requires a valid personal access token, the correct database role and the matching token ability. A role change does not upgrade an old token. Public registration can create riders only.
 
@@ -123,5 +137,7 @@ Development currently uses MAIL_MAILER=log: reset links go to the local Laravel 
 ~~~
 
 PHPUnit uses forced SQLite :memory: databases, not the local MySQL data. Feature tests use real Bearer headers and cover both roles, session-cookie rejection, privilege escalation, token expiry/ownership/revocation, pagination/serialization, throttling/CORS, password recovery/change and admin provisioning.
+
+Verified after the 2 November 2026 refactor: 57 tests / 317 assertions passed, including all original assertions and seven added required-field cases. Pint, optimized Composer autoload generation with strict PSR checks, route inspection and live missing-token/login-validation checks passed. All 17 endpoints retain their paths, route names, response contracts and security middleware.
 
 The repository's AGENTS.md records the ongoing coding standards. Laravel Boost was installed as a development dependency to complete the repository's required agent bootstrap; it is not part of the authentication runtime.

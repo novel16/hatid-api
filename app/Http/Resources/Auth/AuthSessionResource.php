@@ -4,23 +4,23 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\Auth;
 
-use App\Data\AuthSession;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Laravel\Sanctum\NewAccessToken;
 
 class AuthSessionResource extends JsonResource
 {
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
-        /** @var AuthSession $session */
-        $session = $this->resource;
+        /** @var NewAccessToken $token */
+        $token = $this->resource;
 
         return [
-            'user' => new UserResource($session->user),
-            'access_token' => $session->token->plainTextToken,
+            'user' => new UserResource($token->accessToken->tokenable),
+            'access_token' => $token->plainTextToken,
             'token_type' => 'Bearer',
-            'expires_at' => $session->token->accessToken->expires_at->toISOString(),
+            'expires_at' => $token->accessToken->expires_at->toISOString(),
         ];
     }
 }

@@ -19,7 +19,7 @@ final class PasswordService
 
     public function sendResetLink(string $email): void
     {
-        Password::sendResetLink(['email' => Str::lower(trim($email))]);
+        Password::sendResetLink(['email' => User::normalizeEmail($email)]);
     }
 
     public function reset(
@@ -28,7 +28,7 @@ final class PasswordService
         #[SensitiveParameter] string $password,
     ): void {
         $status = DB::transaction(fn (): string => Password::reset(
-            ['email' => Str::lower(trim($email)), 'token' => $token, 'password' => $password],
+            ['email' => User::normalizeEmail($email), 'token' => $token, 'password' => $password],
             function (User $user, string $password): void {
                 $account = User::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail();
                 $this->updatePassword($account, $password);

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password'])]
@@ -22,6 +23,11 @@ class User extends Authenticatable
 
     /** @var array<string, mixed> */
     protected $attributes = ['role' => 'rider'];
+
+    public static function normalizeEmail(string $email): string
+    {
+        return Str::lower(trim($email));
+    }
 
     /** @return array<string, string> */
     protected function casts(): array
