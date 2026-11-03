@@ -9,6 +9,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -23,6 +24,18 @@ class User extends Authenticatable
 
     /** @var array<string, mixed> */
     protected $attributes = ['role' => 'rider'];
+
+    /** Provides the owner's customer scope for every directory operation. */
+    public function customers(): HasMany
+    {
+        return $this->hasMany(Customer::class);
+    }
+
+    /** Provides the owner's seller scope without exposing another rider's preferences. */
+    public function sellers(): HasMany
+    {
+        return $this->hasMany(Seller::class);
+    }
 
     public static function normalizeEmail(string $email): string
     {

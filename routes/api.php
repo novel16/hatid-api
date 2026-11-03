@@ -3,7 +3,13 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Directory\CustomerController;
+use App\Http\Controllers\Api\V1\Directory\SellerController;
 use Illuminate\Support\Facades\Route;
+
+Route::pattern('customer', '[0-9]+');
+Route::pattern('seller', '[0-9]+');
+Route::pattern('address', '[0-9]+');
 
 $authenticatedRoutes = static function (): void {
     Route::get('me', [AuthController::class, 'show'])->name('me');
@@ -23,6 +29,18 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
 
         Route::middleware(['auth:sanctum', 'role:rider', 'abilities:rider:access', 'throttle:authenticated'])
             ->group($authenticatedRoutes);
+    });
+
+    // Protect both private directories with the same real Bearer/role/ability checks as rider auth.
+    Route::middleware(['auth:sanctum', 'role:rider', 'abilities:rider:access', 'throttle:authenticated'])->group(function (): void {
+        Route::apiResource('customers', CustomerController::class);
+        Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
+        Route::post('customers/{customer}/addresses', [CustomerController::class, 'storeAddress'])->name('customers.addresses.store');
+        Route::patch('customers/{customer}/addresses/{address}', [CustomerController::class, 'updateAddress'])->name('customers.addresses.update');
+        Route::delete('customers/{customer}/addresses/{address}', [CustomerController::class, 'destroyAddress'])->name('customers.addresses.destroy');
+        Route::post('customers/{customer}/addresses/{address}/restore', [CustomerController::class, 'restoreAddress'])->name('customers.addresses.restore');
+        Route::apiResource('sellers', SellerController::class);
+        Route::post('sellers/{seller}/restore', [SellerController::class, 'restore'])->name('sellers.restore');
     });
 
     Route::prefix('admin/auth')->name('admin.auth.')->group(function () use ($authenticatedRoutes): void {

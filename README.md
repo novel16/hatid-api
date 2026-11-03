@@ -111,12 +111,55 @@ await fetch("http://localhost/api/v1/auth/me", {
 
 401 means missing/invalid/expired/revoked token; 403 means wrong role/ability; 422 includes validation errors; 429 includes Retry-After. Both clients use the same account table. This first role model gives each account one role; there is no public admin signup.
 
+## Private rider directory
+
+Customers, their addresses and sellers belong to the authenticated rider. Directory routes require the rider database role and rider:access token ability, use the existing Bearer-only middleware and send no-store responses. A foreign parent/child ID returns 404. Owner IDs come from the server and cannot be supplied by clients. No admin directory UI or cross-rider management endpoint is included.
+
+| Method | Path after /api/v1 | Behavior |
+|---|---|---|
+| GET | /customers or /sellers | Search/paginated listing: q, page, per_page (default 25, max 100), archived=0/1 |
+| POST | /customers or /sellers | Create and return a resource with status 201 |
+| GET, PATCH/PUT | /customers/{customer} or /sellers/{seller} | Read/update an active owned record |
+| DELETE | /customers/{customer} or /sellers/{seller} | Reversible archive, status 204 |
+| POST | /customers/{customer}/restore or /sellers/{seller}/restore | Restore an owned archived record |
+| POST | /customers/{customer}/addresses | Add label/text to an active owned customer |
+| PATCH, DELETE | /customers/{customer}/addresses/{address} | Edit or archive an independently owned address |
+| POST | /customers/{customer}/addresses/{address}/restore | Restore an address under its active customer |
+
+Customer inputs: name (2–100), optional phone (max 30), and on creation an optional address object containing label (max 50) and nullable text (max 300). A customer always starts with one address; the default label is Home when no address is submitted. Phone spacing/parentheses/hyphens are removed by Customer::normalizePhone(), shared by writes and search. A known phone is unique per rider including archived customers, while names can repeat. Restore the archived customer rather than creating a duplicate phone record. Country-code conversions are not inferred.
+
+Seller inputs: name (2–100), optional contact (max 100), explicit mode (included/excluded), and fee in integer centavos (0–9007199254740991). For PHP 15 use fee:1500, not 15 or a decimal string. JSON booleans/floats are rejected as fees. These are future-parcel defaults; directory updates do not recalculate saved parcel snapshots or create money records.
+
+CustomerResource allows only id,name,phone,addresses,archived_at; its address entries allow id,label,text,latitude,longitude,verified_at,archived_at. SellerResource allows id,name,contact,mode,fee,archived_at. Lists use native paginated Resource::collection() with data/links/meta; mutations return a data resource, or 204 for archive. Address writes return the updated parent customer resource. API responses do not include owner IDs or authentication fields. GPS is read-only: directory requests reject coordinate/verification writes until a delivery API can establish successful-delivery evidence.
+
+Archive preserves addresses; restoring a parent does not undo an address's separate archive. Unknown address text/coordinates do not block directory creation. Directory mutations are online; offline reconciliation, parcels, deliveries and remittance APIs remain future stages.
+
+Review one customer save in this order: routes/api.php → CustomerRequest::rules()/prepareForValidation() → CustomerController → CustomerService::save() → CustomerResource → tests/Feature/DirectoryTest.php. Seller files follow the same path. Requests choose action-specific rules, services own rider scoping/transactions and resources allowlist output. Search OR conditions stay grouped inside the owner scope. Unique-phone database conflicts become useful 422 validation errors.
+
+This stage adds 11 application source files: three models, two controllers, two requests, two services and two resources. Addresses remain in CustomerService/CustomerResource instead of adding forwarding classes. Supporting files are one additive migration, three factories and one feature-test module; User relationships and existing routes are extended. No repository/interface/dependency layer was added.
+
+| New application file | Purpose |
+|---|---|
+| app/Models/Customer.php | Owned customer identity, phone normalization and address relationship |
+| app/Models/CustomerAddress.php | Separate address metadata and read-only GPS evidence fields |
+| app/Models/Seller.php | Owned seller contact and integer-centavo fee defaults |
+| app/Http/Requests/Directory/CustomerRequest.php | Customer/list/address validation and prohibited owner/GPS inputs |
+| app/Http/Requests/Directory/SellerRequest.php | Seller/list validation, explicit fee mode and strict integer fee |
+| app/Http/Controllers/Api/V1/Directory/CustomerController.php | Customer/address HTTP actions and resource/status responses |
+| app/Http/Controllers/Api/V1/Directory/SellerController.php | Seller HTTP actions and resource/status responses |
+| app/Services/Directory/CustomerService.php | Private customer search, transactional saves and parent/child archive operations |
+| app/Services/Directory/SellerService.php | Private seller search, preference updates and reversible archive operations |
+| app/Http/Resources/Directory/CustomerResource.php | Allowlisted customer/address response fields |
+| app/Http/Resources/Directory/SellerResource.php | Allowlisted seller response fields |
+
+Supporting files: database/migrations/2026_11_03_005308_create_directory_tables.php creates the three tables/ownership constraints. CustomerFactory.php, CustomerAddressFactory.php and SellerFactory.php provide test records for their respective models. tests/Feature/DirectoryTest.php checks the directory HTTP/security contract. No generated application source or lockfile change is needed for this feature.
+
 ## Configuration and recovery
 
 See .env.example. Defaults are explicit and configurable:
 
-- FRONTEND_URL=http://localhost:3000
-- ADMIN_URL=http://localhost:3001
+- FRONTEND_URL=http://localhost:3011
+- ADMIN_URL=http://localhost:3012
 - AUTH_RIDER_TOKEN_TTL=1440 minutes
 - AUTH_ADMIN_TOKEN_TTL=60 minutes
 - CORS_ALLOWED_ORIGINS optionally overrides the two allowed client origins.
@@ -137,6 +180,8 @@ Development currently uses MAIL_MAILER=log: reset links go to the local Laravel 
 ~~~
 
 PHPUnit uses forced SQLite :memory: databases, not the local MySQL data. Feature tests use real Bearer headers and cover both roles, session-cookie rejection, privilege escalation, token expiry/ownership/revocation, pagination/serialization, throttling/CORS, password recovery/change and admin provisioning.
+
+Directory stage verified on 3 November: the full API suite passed 80 tests / 549 assertions, including 23 directory cases / 232 assertions, and scoped Pint passed. Coverage includes rider/role/ability boundaries, grouped search, nested-address isolation, archives/restores, read-only GPS, controlled serialization, normalized/duplicate/optional phones, strict integer fees and an empty initial-address regression. Only the additive directory migration was applied to local Hatid MySQL; no existing data was reset or default users seeded. Live MySQL requests also verified foreign customer/seller GET and PATCH return 404 and foreign searches return zero results. Mobile/desktop browser review verified management forms, archives/restores, fee previews, persistence after re-login and demo separation. Both disposable QA users and their directory rows/tokens were removed afterward; existing users were preserved.
 
 Verified after the 2 November 2026 refactor: 57 tests / 317 assertions passed, including all original assertions and seven added required-field cases. Pint, optimized Composer autoload generation with strict PSR checks, route inspection and live missing-token/login-validation checks passed. All 17 endpoints retain their paths, route names, response contracts and security middleware.
 

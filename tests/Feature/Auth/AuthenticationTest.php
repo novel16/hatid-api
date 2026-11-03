@@ -226,10 +226,14 @@ class AuthenticationTest extends AuthTestCase
         ])->assertTooManyRequests()->assertHeader('Retry-After');
     }
 
-    /** @return array<string, array{string}> */
+    /**
+     * Lists the local clients allowed to send Bearer requests.
+     *
+     * @return array<string, array{string}>
+     */
     public static function frontendOrigins(): array
     {
-        return ['rider' => ['http://localhost:3000'], 'admin' => ['http://localhost:3001']];
+        return ['rider' => ['http://localhost:3011'], 'admin' => ['http://localhost:3012']];
     }
 
     #[DataProvider('frontendOrigins')]
