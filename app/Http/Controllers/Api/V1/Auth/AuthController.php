@@ -67,11 +67,12 @@ class AuthController extends Controller
         return response()->noContent();
     }
 
+    /** Lists owned sign-in devices through the shared pagination contract. */
     public function tokens(AuthRequest $request): AnonymousResourceCollection
     {
         return TokenResource::collection($this->tokens->paginate(
             $request->user(),
-            $request->integer('per_page', 15),
+            $request->integer('per_page', 10),
         ));
     }
 

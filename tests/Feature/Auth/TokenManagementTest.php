@@ -10,6 +10,24 @@ use PHPUnit\Framework\Attributes\DataProvider;
 
 class TokenManagementTest extends AuthTestCase
 {
+    /** Device lists share the ten-entry default and preserve entry sizes in server links. */
+    #[DataProvider('authClients')]
+    public function test_device_pagination_default_and_entry_choices(UserRole $role, string $prefix): void
+    {
+        $user = $this->account($role);
+        for ($index = 0; $index < 12; $index++) {
+            $this->token($user, 'Device '.$index);
+        }
+        $token = $this->token($user, 'Current');
+        $this->api('GET', $prefix.'/tokens', token: $token)
+            ->assertOk()->assertJsonPath('meta.per_page', 10)->assertJsonCount(10, 'data');
+        foreach ([10, 50, 100] as $size) {
+            $response = $this->api('GET', $prefix.'/tokens?per_page='.$size, token: $token)
+                ->assertOk()->assertJsonPath('meta.per_page', $size)->assertJsonPath('meta.total', 13);
+            $this->assertStringContainsString('per_page='.$size, $response->json('links.first'));
+        }
+    }
+
     #[DataProvider('authClients')]
     public function test_token_collection_is_paginated_owned_and_never_exposes_hashes(UserRole $role, string $prefix): void
     {

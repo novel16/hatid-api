@@ -35,6 +35,16 @@ UserRole is a backed enum. Every protected route requires a valid personal acces
 
 The API is session-free: pass Authorization: Bearer, omit cookies, and do not call /sanctum/csrf-cookie. Sanctum stateful domains and session fallback guards are empty; its cookie endpoint is disabled. Tokens are hashed, stored in the database, expire and can be revoked. They are not self-contained JWTs.
 
+## Rider account settings
+
+PATCH /api/v1/settings accepts partial name, optional phone, and preferences containing deliveryAlerts, collectionAlerts and compactView booleans. Name/phone are trimmed; an empty phone clears it. Email, role, password and ownership fields are prohibited. Rider role and rider:access ability are required, and the owner comes exclusively from the Bearer token.
+
+UserResource returns phone and only the three known preferences through both this endpoint and /auth/me, with safe defaults for existing accounts. SettingsService merges partial preferences while locking the owned user row. A saved preference does not create live notification or sync infrastructure.
+
+New application files: SettingsController coordinates the response, SettingsRequest validates editable fields, and SettingsService performs the update. Read routes/api.php → SettingsRequest → SettingsController → SettingsService → the existing UserResource. The separate additive migration adds nullable phone/preferences columns; SettingsTest covers defaults, ownership, protected-field validation and partial saves. Existing token tests cover owned pagination and revocation. The migration was applied to the native database on 4 November without resetting data.
+
+Verified: 99 API tests / 745 assertions passed in isolated SQLite memory. Native PATCH /settings without a token returned 401, allowed the configured rider origin and set no cookie.
+
 ## Local setup
 
 The existing Sail stack serves the API at http://localhost (port 80) and phpMyAdmin at http://localhost:8089. MySQL uses mysql:3306 inside Compose; a host database client uses 127.0.0.1:3308.
@@ -70,7 +80,7 @@ For protected routes, use /api/v1/auth for riders or /api/v1/admin/auth for admi
 | GET | /me | Current user through UserResource |
 | POST | /logout | Revoke the current device token |
 | POST | /logout-all | Revoke every token owned by the current account |
-| GET | /tokens?page=1&per_page=15 | Owned, unexpired tokens; maximum 100 per page |
+| GET | /tokens?page=1&per_page=10 | Owned, unexpired tokens; default 10, maximum 100; client choices 10/50/100 |
 | DELETE | /tokens/{id} | Revoke an owned token; foreign/unknown IDs return 404 |
 | PUT | /password | current_password, password, password_confirmation; revoke all devices |
 
@@ -83,6 +93,8 @@ Login/register returns:
       "id": 1,
       "name": "Example Rider",
       "email": "rider@example.com",
+      "phone": null,
+      "preferences": { "deliveryAlerts": true, "collectionAlerts": true, "compactView": false },
       "role": "rider",
       "email_verified_at": null,
       "created_at": "2026-11-01T00:00:00.000000Z"

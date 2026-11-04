@@ -136,7 +136,7 @@ class AuthenticationTest extends AuthTestCase
 
         $this->api('GET', $prefix.'/me', token: $response->json('data.access_token'))
             ->assertOk()->assertExactJsonStructure([
-                'data' => ['id', 'name', 'email', 'role', 'email_verified_at', 'created_at'],
+                'data' => ['id', 'name', 'email', 'phone', 'preferences', 'role', 'email_verified_at', 'created_at'],
             ]);
     }
 

@@ -37,6 +37,18 @@ class User extends Authenticatable
         return $this->hasMany(Seller::class);
     }
 
+    /** Allows only known preferences and provides defaults for existing accounts. */
+    public function settingPreferences(): array
+    {
+        $preferences = $this->preferences ?? [];
+
+        return [
+            'deliveryAlerts' => (bool) ($preferences['deliveryAlerts'] ?? true),
+            'collectionAlerts' => (bool) ($preferences['collectionAlerts'] ?? true),
+            'compactView' => (bool) ($preferences['compactView'] ?? false),
+        ];
+    }
+
     public static function normalizeEmail(string $email): string
     {
         return Str::lower(trim($email));
@@ -49,6 +61,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
+            'preferences' => 'array',
         ];
     }
 }

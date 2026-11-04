@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Directory\CustomerController;
 use App\Http\Controllers\Api\V1\Directory\SellerController;
+use App\Http\Controllers\Api\V1\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::pattern('customer', '[0-9]+');
@@ -33,6 +34,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
 
     // Protect both private directories with the same real Bearer/role/ability checks as rider auth.
     Route::middleware(['auth:sanctum', 'role:rider', 'abilities:rider:access', 'throttle:authenticated'])->group(function (): void {
+        Route::patch('settings', [SettingsController::class, 'update'])->name('settings.update');
         Route::apiResource('customers', CustomerController::class);
         Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
         Route::post('customers/{customer}/addresses', [CustomerController::class, 'storeAddress'])->name('customers.addresses.store');

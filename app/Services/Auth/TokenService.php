@@ -28,8 +28,10 @@ final class TokenService
         return $token;
     }
 
-    /** @return LengthAwarePaginator<int, PersonalAccessToken> */
-    public function paginate(User $user, int $perPage = 15): LengthAwarePaginator
+    /** Returns only active owned tokens, retaining entry choices in pagination links.
+     * @return LengthAwarePaginator<int, PersonalAccessToken>
+     */
+    public function paginate(User $user, int $perPage = 10): LengthAwarePaginator
     {
         return $user->tokens()
             ->where(function (Builder $query): void {
@@ -39,7 +41,7 @@ final class TokenService
                 $query->where('created_at', '>', now()->subMinutes($minutes));
             })
             ->latest('id')
-            ->paginate($perPage);
+            ->paginate($perPage)->withQueryString();
     }
 
     public function revokeCurrent(User $user): void

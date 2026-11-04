@@ -6,6 +6,8 @@ The user explicitly authorized implementation of API authentication for both the
 
 The latest customer/seller feature request additionally authorizes their API and rider-frontend implementation, additive directory migrations and relevant tests. The user confirmed a private directory per rider. Keep server ownership checks on all parent/child records, real data separate from demo workflows and GPS writes gated by actual delivery evidence. Admin UI and unrelated business APIs remain outside this stage.
 
+On 4 November the user confirmed full rider Settings: profile name/optional phone, read-only email, saved alert/compact preferences, existing password management and owned device review/revocation. This authorizes the focused Settings endpoint, additive users migration and tests. SettingsController/SettingsRequest/SettingsService reuse UserResource, which allowlists phone and known preferences with defaults. Partial preferences merge under an owned-account row lock. Keep email, role, password and ownership changes out of this endpoint. Active tokens use the shared 10-entry default and preserve pagination query links; no new admin UI or live notification/sync API is authorized here.
+
 ## Required skills, simplicity and comments
 
 - Always use the installed Ponytail skill for every feature and other coding change, including fixes and refactors. Follow its workflow before implementation.
