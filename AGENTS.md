@@ -1,6 +1,6 @@
 # Hatid API development rules
 
-Read CLAUDE.md for the installed Laravel/PHP/PHPUnit/Pint conventions. Bootstrap is complete: PHP 8.4, Composer and Laravel Boost are available inside the Sail container; do not reinstall host PHP or Composer. Sanctum is a runtime dependency, Boost is development-only.
+Read CLAUDE.md for the installed Laravel/PHP/PHPUnit/Pint conventions. The active project is now the native Windows copy: PHP8.4.27 from C:/xampp/php and Composer2.8.10 are installed and verified. Preserve that installation. Sanctum is a runtime dependency, Boost is development-only.
 
 The user explicitly authorized implementation of API authentication for both the rider client and admin. Related dependencies, additive migrations, configuration and meaningful tests are authorized. Frontend/admin application code is out of scope.
 
@@ -41,4 +41,6 @@ The latest customer/seller feature request additionally authorizes their API and
 ## Runtime access
 Local client URLs are http://localhost:3011 for the rider frontend and http://localhost:3012 for admin. Keep clients.php, CORS origins, .env.example and local environment URLs aligned; password reset links use these client URLs. Bearer auth remains cookie-free.
 
-Application path: /home/novel/projects/hatid/api, mounted as /var/www/html in hatid-laravel.test-1. Use Sail in WSL. If wsl.exe execution times out, native Docker exec with --user sail --workdir /var/www/html is available; do not restart WSL or disrupt other projects just to run commands.
+Active application path: C:/Users/Novel/Desktop/laravel projects/hatid/api. Use native Windows PHP/Composer from this copy and quote paths containing spaces. The previous /home/novel/projects/hatid/api is a legacy copy, not the active source directory. Preserve its database/data until migration is verified; do not restart WSL or disrupt other projects just to run commands.
+
+Native readiness check on3 November: Composer platform requirements passed, Laravel13.39.0 booted, and80 tests/549 assertions passed using isolated SQLite memory. The subsequent explicit frontend/API fix request authorized local runtime repairs. The user chose a new empty XAMPP hatid database and will create their own account; six normal additive migrations were applied without importing/seeding users or touching the legacy Docker data. Native API is http://127.0.0.1:8000, APP_URL matches that address, and PHP_CLI_SERVER_WORKERS=1 avoids the old multi-worker warning. Preserve the user's local database credentials. API startup is in their existing VS Code terminal; avoid starting a duplicate server.

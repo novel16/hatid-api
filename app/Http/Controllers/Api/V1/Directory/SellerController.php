@@ -18,11 +18,11 @@ class SellerController extends Controller
     /** Injects seller preference operations without placing business logic in the controller. */
     public function __construct(private readonly SellerService $sellers) {}
 
-    /** Returns the rider's filtered seller collection with native pagination metadata. */
+    /** Returns private seller pagination with the same ten-entry default as the UI. */
     public function index(SellerRequest $request): AnonymousResourceCollection
     {
         return SellerResource::collection($this->sellers->paginate(
-            $request->user(), $request->string('q')->toString(), $request->boolean('archived'), $request->integer('per_page', 25),
+            $request->user(), $request->string('q')->toString(), $request->boolean('archived'), $request->integer('per_page', 10),
         ));
     }
 

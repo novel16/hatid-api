@@ -88,6 +88,39 @@ class DirectoryTest extends AuthTestCase
         $this->api('GET', $path.'?q=Second', token: $token)->assertOk()->assertJsonCount(1, 'data');
     }
 
+    /** UI page sizes return real scoped totals, bounded slices and preserved search links. */
+    #[DataProvider('directories')]
+    public function test_directory_supports_ten_fifty_and_one_hundred_entries(string $path): void
+    {
+        $rider = $this->account();
+        $token = $this->token($rider);
+        $model = $this->isCustomer($path) ? Customer::class : Seller::class;
+        $model::factory()->for($rider)->count(105)->create(['name' => 'Matching record']);
+        $model::factory()->for($rider)->create(['name' => 'Unrelated record']);
+        $model::factory()->for($rider)->create(['name' => 'Matching archived', 'deleted_at' => now()]);
+        $model::factory()->count(2)->create(['name' => 'Matching foreign']);
+
+        $this->api('GET', $path.'?q=Matching', token: $token)->assertOk()
+            ->assertJsonCount(10, 'data')->assertJsonPath('meta.per_page', 10)
+            ->assertJsonPath('meta.total', 105)->assertJsonPath('meta.last_page', 11);
+
+        foreach ([10 => 10, 50 => 50, 100 => 5] as $perPage => $count) {
+            $response = $this->api('GET', $path.'?q=Matching&per_page='.$perPage.'&page=2', token: $token)
+                ->assertOk()->assertJsonCount($count, 'data')
+                ->assertJsonPath('meta.current_page', 2)->assertJsonPath('meta.per_page', $perPage)
+                ->assertJsonPath('meta.total', 105)->assertJsonPath('meta.from', $perPage + 1)
+                ->assertJsonPath('meta.to', min($perPage * 2, 105));
+            parse_str(parse_url($response->json('links.prev'), PHP_URL_QUERY), $query);
+            $this->assertSame('Matching', $query['q']);
+            $this->assertSame((string) $perPage, $query['per_page']);
+            $this->assertSame('1', $query['page']);
+        }
+
+        $this->api('GET', $path.'?q=NoSuchRecord&per_page=100', token: $token)->assertOk()
+            ->assertJsonCount(0, 'data')->assertJsonPath('meta.total', 0)
+            ->assertJsonPath('meta.from', null)->assertJsonPath('meta.to', null);
+    }
+
     /** Foreign IDs cannot be read, changed, archived or restored. */
     #[DataProvider('directories')]
     public function test_foreign_records_return_not_found(string $path): void
@@ -284,8 +317,8 @@ class DirectoryTest extends AuthTestCase
         Seller::factory()->count(2)->create();
         $customer = Customer::factory()->for($rider)->has(CustomerAddress::factory()->count(2), 'addresses')->create();
         $this->api('GET', '/api/v1/sellers', token: $token)->assertOk()
-            ->assertJsonCount(25, 'data')->assertJsonPath('meta.total', 26)->assertJsonPath('meta.last_page', 2);
-        $this->api('GET', '/api/v1/sellers?page=2', token: $token)->assertOk()->assertJsonCount(1, 'data');
+            ->assertJsonCount(10, 'data')->assertJsonPath('meta.total', 26)->assertJsonPath('meta.last_page', 3);
+        $this->api('GET', '/api/v1/sellers?page=3', token: $token)->assertOk()->assertJsonCount(6, 'data');
         $this->api('GET', '/api/v1/customers/'.$customer->id, token: $token)->assertOk()
             ->assertJsonCount(2, 'data.addresses');
     }

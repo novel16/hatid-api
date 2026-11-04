@@ -2,6 +2,17 @@
 
 Laravel 13.39 / PHP 8.4 / Sanctum 4.3.3. This API serves the rider PWA and the separate admin app.
 
+## Native Windows development
+
+The active project is C:/Users/Novel/Desktop/laravel projects/hatid/api. PHP8.4.27 runs from XAMPP, with the API at http://127.0.0.1:8000 and the rider client at http://localhost:3011. In Git Bash:
+
+```bash
+cd "/c/Users/Novel/Desktop/laravel projects/hatid/api"
+php artisan serve
+```
+
+The local APP_URL matches port8000 and PHP_CLI_SERVER_WORKERS=1. XAMPP MariaDB uses the local hatid database. On3 November the user chose a new empty database; six additive migrations were applied and the user will register their own rider account. Earlier Sail instructions describe the legacy environment; its data was preserved. Avoid starting another server when this terminal is already running.
+
 ## Architecture and coding standards
 
 AuthController coordinates the auth endpoints, and AuthRequest keeps their validation in one place. Focused services under app/Services/Auth handle accounts, credentials, token lifecycle and passwords. API Resources explicitly select public response fields. TokenResource::collection() uses Laravel's built-in paginated collection without exposing token hashes.
@@ -113,11 +124,13 @@ await fetch("http://localhost/api/v1/auth/me", {
 
 ## Private rider directory
 
+Pagination update, 3 November: both list controllers default to ten entries. CustomerService/SellerService retain native paginate($perPage)->withQueryString(), deterministic ordering, rider ownership and Resource collections. Explicit per_page=10, 50 and 100 are verified; existing API validation still permits integers 1..100. The full isolated suite passed 82 tests / 629 assertions, including search links, partial/empty pages and foreign-owner exclusion. No migration or development-data change was needed.
+
 Customers, their addresses and sellers belong to the authenticated rider. Directory routes require the rider database role and rider:access token ability, use the existing Bearer-only middleware and send no-store responses. A foreign parent/child ID returns 404. Owner IDs come from the server and cannot be supplied by clients. No admin directory UI or cross-rider management endpoint is included.
 
 | Method | Path after /api/v1 | Behavior |
 |---|---|---|
-| GET | /customers or /sellers | Search/paginated listing: q, page, per_page (default 25, max 100), archived=0/1 |
+| GET | /customers or /sellers | Search/paginated listing: q, page, per_page (default 10, max 100), archived=0/1 |
 | POST | /customers or /sellers | Create and return a resource with status 201 |
 | GET, PATCH/PUT | /customers/{customer} or /sellers/{seller} | Read/update an active owned record |
 | DELETE | /customers/{customer} or /sellers/{seller} | Reversible archive, status 204 |

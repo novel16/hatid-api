@@ -18,11 +18,11 @@ class CustomerController extends Controller
     /** Injects the focused customer/address business service. */
     public function __construct(private readonly CustomerService $customers) {}
 
-    /** Returns the rider's filtered resource collection with native pagination metadata. */
+    /** Returns a private paginated collection, defaulting to the UI's ten entries. */
     public function index(CustomerRequest $request): AnonymousResourceCollection
     {
         return CustomerResource::collection($this->customers->paginate(
-            $request->user(), $request->string('q')->toString(), $request->boolean('archived'), $request->integer('per_page', 25),
+            $request->user(), $request->string('q')->toString(), $request->boolean('archived'), $request->integer('per_page', 10),
         ));
     }
 
