@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -9,11 +11,11 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     */
+    /** Adds local customer fixtures only; accounts still come from registration or app:create-admin. */
     public function run(): void
     {
-        // Accounts are registered through the API or provisioned with app:create-admin.
+        if (app()->environment('local', 'testing')) {
+            $this->call(CustomerSeeder::class);
+        }
     }
 }
