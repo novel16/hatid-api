@@ -1,5 +1,7 @@
 # Hatid API
 
+Publishing authorization updated5 November: the user now includes this API repository in the main-branch push, with separate feature commits for the accumulated implementation. This supersedes earlier local-only notes for completed stages below. Private .env/keys, developer database contents, vendor and generated output remain local. Publishing applies no new migrations or seed operations and preserves the running servers.
+
 Laravel 13.39 / PHP 8.4 / Sanctum 4.3.3. This API serves the rider PWA and the separate admin app.
 
 ## Native Windows development
@@ -34,6 +36,86 @@ AuthRequest chooses rules by the server-side controller action. When adding or r
 UserRole is a backed enum. Every protected route requires a valid personal access token, the correct database role and the matching token ability. A role change does not upgrade an old token. Public registration can create riders only.
 
 The API is session-free: pass Authorization: Bearer, omit cookies, and do not call /sanctum/csrf-cookie. Sanctum stateful domains and session fallback guards are empty; its cookie endpoint is disabled. Tokens are hashed, stored in the database, expire and can be revoked. They are not self-contained JWTs.
+
+## Actual earnings reports and dashboard — 5 November
+
+Three rider-only read routes reuse the existing Bearer, role, ability and private-response middleware:
+
+| Route | Result |
+|---|---|
+| GET /api/v1/reports/earnings | ParcelResource ledger pagination plus full filtered report metadata |
+| GET /api/v1/reports/earnings/export | Complete filtered UTF-8 CSV; page/per_page are ignored |
+| GET /api/v1/dashboard | Today's confirmed receipts/fees, all-week work and lifetime seller debt |
+
+Report inputs: period=day/week/month/custom (default week), optional date=YYYY-MM-DD for noncustom periods, or required start/end for custom. Week is Monday–Sunday; month is a calendar month. All bounds are Asia/Manila local midnights converted to half-open UTC intervals over received_at. Optional q(max100), actual method=all/cash/gcash, page>=1 and per_page1..100(default10). Ownership and timezone cannot be overridden. Dashboard always uses server today and rejects period overrides.
+
+CollectionService::receiptQuery shares owner/full-receipt/delivered/actual-method/search eligibility with reports and export. Summary centavos and chart totals cover every match, independent of pagination. Long periods use at most60 labelled day-interval buckets; zero remains zero. A short read transaction keeps aggregate/current-page reads consistent. Native MySQL REPEATABLE-READ was verified; no concurrent-write benchmark is claimed. Dashboard work spans all intake weeks while its money covers today, and seller_outstanding is separately lifetime-scoped through CollectionService.
+
+CSV uses200-row batches, native tmpfile/fputcsv, UTF-8 BOM, CRLF, exact centavo decimals and formula-safe names. It is fully prepared before success headers and always closes/removes its temporary stream. It contains original batch, actual receipt method and Manila confirmation time; it exports all matching rows. No gateway, wallet, transfer, remittance mutation or new fee recognition is introduced. No schema or dependency changes.
+
+Four new application files: ReportRequest validates the date/filter contract; ReportService owns periods, shared-query aggregation and CSV preparation; ReportResource allowlists metadata/totals; ReportController delegates and serializes. The fifth new API file, tests/Feature/ReportTest.php, is test support. Review routes/api.php → ReportRequest → ReportService/CollectionService::receiptQuery → ReportResource/ParcelResource → ReportTest. Existing receipt/pricing/remittance history stays unchanged.
+
+Verification: focused Report/Collection38 tests/310 assertions, then full222 tests/1692 assertions passed in isolated SQLite; scoped Pint and diff checks passed. CSV coverage crosses the200-row chunk boundary and proves page/per_page do not limit export. Native report/dashboard/CSV reads and financial invariants passed without record changes. Missing-Bearer routes returned401 with no cookies. Signed-in browser report layouts and simultaneous native writes remain unverified; user API/dev servers were preserved. API changes remain local/uncommitted under the user's publishing scope.
+
+## Collections and seller handovers — 5 November
+
+All routes require the existing rider Bearer token, role and ability:
+
+- GET /api/v1/collections: full successful receipts, actual payment method/search and native10/50/100 pagination.
+- GET /api/v1/collections/sellers: owned active/archived seller balances, name/contact search, optional owned seller_id and all/outstanding/settled filter.
+- GET /api/v1/remittances: handover history, actual handover method/search and pagination.
+- GET /api/v1/remittances/{id}: fixed10-row original parcel allocations plus a controlled remittance header.
+- POST /api/v1/remittances: operation_id UUID, seller_id, strict integer-centavo amount, cash/gcash method, optional reference(max200), and handover_confirmed. No update/delete route.
+
+List responses include a separately labelled lifetime account summary: cash, gcash, fees, seller_share, remitted, outstanding and receipts count. A single aggregate SQL statement keeps its own money terms consistent; list filters/pages never redefine its scope. Conditional ParcelResource settlement/allocated_amount and SellerResource balance fields appear only on financial queries. RemittanceResource exposes the recorded header without user IDs, operation keys or hashes.
+
+CollectionService shares DeliveryService's rider-first transaction lock. It checks identical canonical UUID/payload replay before a seller's current balance, so retry works after full settlement. Changed reuse returns409. Partial amounts allocate oldest received_at first, id tie-break, to positive outstanding seller shares across original batches. The same transaction creates the header and allocations, rejecting excess amounts atomically. Archived seller identity and immutable parcel pricing/receipts/fees survive settlement. The amount must describe a completed real handover; Hatid never initiates or verifies an external transfer.
+
+New application files: CollectionController (HTTP), CollectionRequest (validation), CollectionService (queries/transaction), Remittance (header and native amount pivot relationship), RemittanceResource (allowlist). One migration and one focused feature-test module are support files; there is no new dependency or allocation model. Read routes → request → controller → service → Resource → CollectionTest for one handover.
+
+Verified:202 API tests/1552 assertions and scoped Pint passed in isolated SQLite. Native database summary/list/balance/history reads and money invariants passed; migration2026_11_04_225754 was applied141.16ms without reset/seed or existing money changes. Actual MySQL concurrent execution and signed-in browser mutation are not claimed. The frontend's interrupted→429 retry regression passed after retaining the original operation until confirmed. User API/dev servers were preserved. Native handover dates use server confirmation time; correction/backdating workflows and durable reload/offline recovery remain separate stages.
+
+## Parcel entry and manual deliveries
+
+All endpoints use the existing cookie-free Bearer/rider/rider:access boundary:
+
+| Method | Path | Behavior |
+|---|---|---|
+| POST | /api/v1/parcels | One owned parcel, reviewed immutable pricing and replay-safe operation_id;201 |
+| GET | /api/v1/parcels/{parcel} | Owned saved parcel and controlled history |
+| GET | /api/v1/deliveries | Native pagination of matching customer/address stops across weeks |
+| GET | /api/v1/deliveries/{parcel} | All parcels at that owned anchor's customer/address across original batches |
+| POST | /api/v1/deliveries/{parcel}/outcomes | Atomic selected-parcel outcome and explicit full receipts; updated selected Resources |
+
+Intake requires operation_id(UUID), batch_id, customer_id, address_id, seller_id, quote/fee(integer centavos), mode(included/excluded), expected_method(cash/gcash), optional description/note/override_reason. All parents must be active/owned and address must belong to customer; archived directory records remain usable for existing delivery history. Quote is1..999999999 centavos, fee0..999999999; included fee<=quote. Server derives customer total and net seller share, with a reason required when seller defaults differ. Fee mode and amounts stay frozen after later seller edits. No update/delete parcel endpoint.
+
+Delivery queries: q(name/phone/address/seller/description/reference), page>=1, per_page1..100(default10), optional owned batch_id, status(open default/ready/all/pending/held/failed/delivered/returned), method(all/cash/gcash). Status and method match the same parcel. Open includes pending/held/failed; Ready includes pending/due holds. A list row contains only matching parcels; detail shows the complete customer/address group across weeks. Query alternatives stay under the owner scope; pagination is over grouped stops, not client slicing or an unbounded directory download.
+
+Outcome body: operation_id, distinct parcel_ids(max100 at the same stop), outcome, note(3..500). Held requires a future retry_at with seconds and timezone offset (`YYYY-MM-DDTHH:mm:ss+00:00`); shape is validated in ParcelRequest, future-time business validation follows replay lookup. Delivered requires receipt_confirmed=true and exactly one receipt per selected parcel: parcel_id, method(cash/gcash), amount(equal to frozen full total), optional reference. Partial payment is not supported. Returned requires handover_confirmed=true. Failed is not returned; failed/future-held work must explicitly resume to pending before delivery. Delivered/returned states are terminal. Server timestamps receipt evidence; no client/GPS/owner overrides.
+
+An owned rider-row transaction serializes create/outcome writes. Native unique(user_id,operation_id) and unique(parcel_id,operation_id), plus canonical request hashes, protect retries. Identical retries return saved evidence even after archiving or retry-time expiry. Reusing a key with changed content returns422. Selection validation and all receipts commit atomically. One receipt lives on each parcel, and attempts are append-only. Money totals are future derived reports; no wallet, transfer, remittance or earnings ledger endpoint was invented. No maps/routing/GPS writes, admin UI or durable offline queue in this stage.
+
+Nine new source classes: Parcel/DeliveryAttempt models; ParcelRequest; ParcelController/DeliveryController; ParcelService/DeliveryService; ParcelResource/DeliveryResource. Read route → Request → Controller → Service → Resource. One additive migration (`2026_11_04_055525_create_parcels_table`), ParcelFactory, ParcelTest and DeliveryTest are schema/test support. The migration was applied to native Hatid without resetting old data. Tests use isolated SQLite memory and real Bearer headers. Final test/browser evidence is in project memory and the implementation plan.
+
+Verified4 November: full165 API tests/1160 assertions and Pint passed, including changed/identical replays, elapsed-hold replay, owned/nested/archived relations, fixed prices, native grouped pagination, mixed payment/status filters, partial/atomic receipts, terminal guards and hold/fail/retry/return history. A native temporary QA account exercised the actual responsive frontend and was then removed with only its owned fixtures. Native401/CORS/no-cookie behavior was checked. Existing user records/servers were preserved; no native concurrent-device test is claimed.
+
+## Weekly intake batches
+
+Rider-only endpoints use the existing Bearer/role/rider:access boundary:
+
+| Method | Path | Behavior |
+|---|---|---|
+| GET | /api/v1/batches?q=...&page=1&per_page=10 | Owned name search, stable date/id ordering, native pagination and current_week defaults |
+| POST | /api/v1/batches | Create with name, start and end; returns 201 |
+| GET | /api/v1/batches/{id} | Owned detail, including older weeks; foreign/missing IDs return 404 |
+
+An exact start/end range is unique per rider. BatchService maps native unique-constraint collisions to a 422 start-field error; another rider can use the same dates. Names are trimmed (2–60 characters), dates must be real YYYY-MM-DD values and end must be on/after start. Default calendar metadata is Monday–Sunday in Asia/Manila, including UTC Sunday/local Monday and year transitions. Date storage uses start_date/end_date; request/resource fields use start/end to match the existing UI. There is no new overlap or strict seven-day restriction.
+
+BatchResource returns id, name, start, end, period and created_at only. period is current/previous/upcoming calendar context, separate from delivery completion or selected UI state. No fictitious parcel/fee totals, date-expiry lock or update/delete/archive route is exposed. Parcel entry and cross-week manual deliveries now use these owned batch IDs while retaining original intake dates.
+
+New application files: Batch is the owned model, BatchRequest validates queries/intake data, BatchController coordinates HTTP, BatchService performs business operations, and BatchResource controls output. Read routes → request → controller → service → resource. One additive migration and BatchFactory/BatchTest are supporting schema/test files, separate from those five source files. The native migration was applied on 4 November without inserting or resetting user data.
+
+Verification: focused26 batch tests passed, then full125 API tests/905 assertions and scoped Pint. Tests cover privacy, validation, native uniqueness, pagination, previous-week access and Manila calendar boundaries.
 
 ## Rider account settings
 
@@ -153,6 +235,8 @@ Customers, their addresses and sellers belong to the authenticated rider. Direct
 
 Customer inputs: name (2–100), optional phone (max 30), and on creation an optional address object containing label (max 50) and nullable text (max 300). A customer always starts with one address; the default label is Home when no address is submitted. Phone spacing/parentheses/hyphens are removed by Customer::normalizePhone(), shared by writes and search. A known phone is unique per rider including archived customers, while names can repeat. Restore the archived customer rather than creating a duplicate phone record. Country-code conversions are not inferred.
 
+For local pagination fixtures, register one rider and run `php artisan db:seed --class=CustomerSeeder`. The existing `CustomerFactory::dummy()` state labels names `[Dummy]`; `CustomerSeeder` tops up to 2,000 marked customers with one unverified address each, in batches of 100. Phones and GPS remain null. Re-running counts existing marked records, including archives, without duplicating or restoring them. Existing customers and account credentials are preserved. The default `DatabaseSeeder` calls this only in local/testing environments; direct class invocation also rejects other environments. With zero or multiple riders it stops rather than guessing the owner. Review factory → seeder → tests/Feature/CustomerSeederTest.php.
+
 Seller inputs: name (2–100), optional contact (max 100), explicit mode (included/excluded), and fee in integer centavos (0–9007199254740991). For PHP 15 use fee:1500, not 15 or a decimal string. JSON booleans/floats are rejected as fees. These are future-parcel defaults; directory updates do not recalculate saved parcel snapshots or create money records.
 
 CustomerResource allows only id,name,phone,addresses,archived_at; its address entries allow id,label,text,latitude,longitude,verified_at,archived_at. SellerResource allows id,name,contact,mode,fee,archived_at. Lists use native paginated Resource::collection() with data/links/meta; mutations return a data resource, or 204 for archive. Address writes return the updated parent customer resource. API responses do not include owner IDs or authentication fields. GPS is read-only: directory requests reject coordinate/verification writes until a delivery API can establish successful-delivery evidence.
@@ -211,3 +295,23 @@ Directory stage verified on 3 November: the full API suite passed 80 tests / 549
 Verified after the 2 November 2026 refactor: 57 tests / 317 assertions passed, including all original assertions and seven added required-field cases. Pint, optimized Composer autoload generation with strict PSR checks, route inspection and live missing-token/login-validation checks passed. All 17 endpoints retain their paths, route names, response contracts and security middleware.
 
 The repository's AGENTS.md records the ongoing coding standards. Laravel Boost was installed as a development dependency to complete the repository's required agent bootstrap; it is not part of the authentication runtime.
+
+## Vehicle, verified GPS and free maps — 4 November
+
+New rider registration requires `vehicle`: `motorcycle`, `bicycle` or `car`. Existing riders keep a nullable vehicle and can still sign in and deliver manually; PATCH `/api/v1/settings` completes/changes the vehicle. Auth/Settings reuse their existing request/service/resource files. `/auth/me` returns the verified profile; provider modes are derived server-side (`car` becomes `drive`), never accepted from an arbitrary client profile.
+
+POST `/api/v1/deliveries/{parcel}/location` is separate from the saved handover. It requires an owned delivered parcel, full receipt and a real delivered attempt. Inputs are latitude/longitude, original gps_latitude/gps_longitude, accuracy in meters, captured_at, review_confirmed, expected_version and optional replace_confirmed. Readings must be within five minutes, no more than fifteen seconds ahead, and after the handover with five seconds clock/precision tolerance. Replacement requires explicit confirmation; an outdated version returns409. Weak accuracy stays visible for review/correction. This verifies evidence/validation, not cryptographic authenticity of browser GPS. Skip/error never changes money. Directory GPS writes remain prohibited; CustomerResource::addressData shares the controlled pin metadata across directory/parcels/deliveries without exposing evidence IDs.
+
+| Endpoint | Behavior |
+|---|---|
+| GET `/api/v1/map` | Free metadata/configuration and app-accounted shared allowance; no automatic provider call |
+| POST `/api/v1/map/recommendations` | Fresh latitude/longitude/accuracy/captured_at; server shortlists up to five owned ready pinned stops across intake weeks, then ranks returned time, road distance and stable identity |
+| GET `/api/v1/map/tiles/{z}/{x}/{y}` | Bearer-protected fixed PNG proxy; bounded coordinates, cached bytes and a separate tile throttle preserve delivery API capacity |
+
+Provider configuration is only in ignored `api/.env`: `GEOAPIFY_API_KEY` and `GEOAPIFY_CREDIT_LIMIT=2500` (clamped to2500). One server key serves maps and comparisons; no public browser key or paid Google API is needed. Keep the provider project on Free and rotate keys exposed in messages. Provider URLs/bodies/errors/keys never reach clients; the provider receives coordinates and vehicle only. Preserve Geoapify/OpenStreetMap attribution. Production phone GPS needs HTTPS and browser permission; a LAN HTTP IP is not localhost.
+
+The quota is the app's conservative accounting, not a live provider balance. SQL `map_usage` buckets store quarter-credits under a global row lock, covering the current and previous24 UTC hours so midnight/cache clearing cannot reset spent credits. Tiles reserve0.25; matrix calls reserve the candidate count plus500 credits for distance surcharges, releasing a successful known remainder. Uncertain failures retain the reservation and may pause comparisons earlier. No provider retry loop or automatic paid upgrade exists. Cached geometry/tiles require no new provider request; clearing `php artisan cache:clear --store=maps` does not reset SQL usage. The maps file-cache store lives in storage/framework/cache/maps; include its normal cleanup in deployment operations. Untracked usage of the same provider project/keys is outside this counter.
+
+Five new application source files: `MapRequest` validates inputs/shared GPS rules; `MapController` handles HTTP; `MapResource` allowlists output and reuses DeliveryResource; `MapService` owns private shortlist/ranking; `GeoapifyService` owns fixed HTTP/cache/quota. Supporting files are config/maps.php, one additive migration and tests/Feature/MapTest.php. Existing Auth/Settings/delivery/directory classes are extended; no repository/interface/provider-factory layer was added.
+
+Reading order: routes/api.php → MapRequest → MapController → MapService → GeoapifyService → MapResource → MapTest. For GPS, read ParcelRequest location rules → DeliveryController::location → DeliveryService::saveLocation → shared address resource → DeliveryTest. Tests use SQLite memory and isolated array caches; native provider smoke checks use public sample coordinates, never real customer/payment records. Final verification and any browser/phone limitations are recorded in PROJECT_MEMORY.md and the maps plan.
