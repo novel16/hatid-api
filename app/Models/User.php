@@ -43,6 +43,12 @@ class User extends Authenticatable
         return $this->hasMany(Batch::class);
     }
 
+    /** Keeps parcel intake, manual outcomes and history inside this rider's workspace. */
+    public function parcels(): HasMany
+    {
+        return $this->hasMany(Parcel::class);
+    }
+
     /** Allows only known preferences and provides defaults for existing accounts. */
     public function settingPreferences(): array
     {
