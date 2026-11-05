@@ -37,6 +37,12 @@ class User extends Authenticatable
         return $this->hasMany(Seller::class);
     }
 
+    /** Scopes every intake batch to its owning rider. */
+    public function batches(): HasMany
+    {
+        return $this->hasMany(Batch::class);
+    }
+
     /** Allows only known preferences and provides defaults for existing accounts. */
     public function settingPreferences(): array
     {
