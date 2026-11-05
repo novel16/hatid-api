@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\BatchController;
+use App\Http\Controllers\Api\V1\CollectionController;
 use App\Http\Controllers\Api\V1\DeliveryController;
 use App\Http\Controllers\Api\V1\Directory\CustomerController;
 use App\Http\Controllers\Api\V1\Directory\SellerController;
@@ -17,6 +18,7 @@ Route::pattern('seller', '[0-9]+');
 Route::pattern('address', '[0-9]+');
 Route::pattern('batch', '[0-9]+');
 Route::pattern('parcel', '[0-9]+');
+Route::pattern('remittance', '[0-9]+');
 
 $authenticatedRoutes = static function (): void {
     Route::get('me', [AuthController::class, 'show'])->name('me');
@@ -41,6 +43,11 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
     // Protect private rider features with the same real Bearer/role/ability checks as auth.
     Route::middleware(['auth:sanctum', 'role:rider', 'abilities:rider:access', 'throttle:authenticated'])->group(function (): void {
         Route::patch('settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::get('collections', [CollectionController::class, 'index'])->name('collections.index');
+        Route::get('collections/sellers', [CollectionController::class, 'sellers'])->name('collections.sellers');
+        Route::get('remittances', [CollectionController::class, 'history'])->name('remittances.index');
+        Route::post('remittances', [CollectionController::class, 'store'])->name('remittances.store');
+        Route::get('remittances/{remittance}', [CollectionController::class, 'show'])->name('remittances.show');
         Route::get('map', [MapController::class, 'show'])->name('map.show');
         Route::post('map/recommendations', [MapController::class, 'recommend'])->name('map.recommend');
         Route::get('map/tiles/{z}/{x}/{y}', [MapController::class, 'tile'])->whereNumber(['z', 'x', 'y'])

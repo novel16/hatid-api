@@ -39,6 +39,13 @@ class ParcelResource extends JsonResource
                 ],
             )),
             'created_at' => $this->created_at->toISOString(),
+            /** Collection queries add settlement totals without changing the immutable receipt. */
+            'settlement' => $this->whenHas('remitted_amount', fn (): array => [
+                'remitted' => (int) $this->remitted_amount,
+                'outstanding' => $this->seller_share - (int) $this->remitted_amount,
+            ]),
+            /** Detail pages expose only this handover's original allocation, not a pivot model. */
+            'allocated_amount' => $this->whenPivotLoaded('remittance_allocations', fn (): int => (int) $this->pivot->amount),
         ];
     }
 }

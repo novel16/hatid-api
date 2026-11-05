@@ -51,6 +51,12 @@ class User extends Authenticatable
         return $this->hasMany(Parcel::class);
     }
 
+    /** Keeps every recorded seller handover inside this rider's private ledger. */
+    public function remittances(): HasMany
+    {
+        return $this->hasMany(Remittance::class);
+    }
+
     /** Allows only known preferences and provides defaults for existing accounts. */
     public function settingPreferences(): array
     {
