@@ -34,6 +34,11 @@ return [
 
     'stores' => [
 
+        'maps' => [
+            'driver' => 'file',
+            'path' => storage_path('framework/cache/maps'),
+        ],
+
         'array' => [
             'driver' => 'array',
             'serialize' => false,

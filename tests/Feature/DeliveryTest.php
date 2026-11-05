@@ -13,6 +13,93 @@ use Tests\Feature\Auth\AuthTestCase;
 
 class DeliveryTest extends AuthTestCase
 {
+    /** Only an actual owned successful handover can authorize a separately confirmed address pin. */
+    public function test_gps_requires_delivery_evidence_and_preserves_money_on_skip_and_save(): void
+    {
+        $this->freezeTime();
+        $rider = $this->account();
+        $parcel = Parcel::factory()->for($rider)->create();
+        $token = $this->token($rider);
+        $url = '/api/v1/deliveries/'.$parcel->id.'/location';
+        $this->api('POST', $url, $this->location(), $token)->assertUnprocessable()->assertJsonValidationErrors('delivery');
+        $this->api('POST', '/api/v1/deliveries/'.$parcel->id.'/outcomes', $this->outcome([$parcel], 'delivered'), $token)->assertOk();
+        $this->assertNull($parcel->address->fresh()->latitude);
+        $receipt = $parcel->fresh()->received_at->toISOString();
+        $this->travel(1)->seconds();
+        $this->api('POST', $url, $this->location(), $token)->assertOk()
+            ->assertJsonPath('data.address.latitude', 14.5995)->assertJsonPath('data.address.longitude', 120.9842)
+            ->assertJsonPath('data.address.location_version', 1)
+            ->assertJsonMissingPath('data.address.verified_delivery_attempt_id')
+            ->assertJsonMissingPath('data.address.customer_id');
+        $this->assertSame($receipt, $parcel->fresh()->received_at->toISOString());
+        $this->assertSame(11500, $parcel->fresh()->received_amount);
+        $this->assertDatabaseCount('delivery_attempts', 1);
+        $this->assertSame('delivered', $parcel->fresh()->status);
+    }
+
+    /** An existing or concurrently updated pin needs an explicit, current replacement decision. */
+    public function test_location_replacement_rejects_stale_versions(): void
+    {
+        $this->freezeTime();
+        $rider = $this->account();
+        $parcel = Parcel::factory()->for($rider)->create();
+        $token = $this->token($rider);
+        $this->api('POST', '/api/v1/deliveries/'.$parcel->id.'/outcomes', $this->outcome([$parcel], 'delivered'), $token)->assertOk();
+        $url = '/api/v1/deliveries/'.$parcel->id.'/location';
+        $this->api('POST', $url, $this->location(), $token)->assertOk();
+        $changed = [...$this->location(), 'latitude' => 14.6, 'expected_version' => 1];
+        $this->api('POST', $url, $changed, $token)->assertUnprocessable()->assertJsonValidationErrors('replace_confirmed');
+        $this->api('POST', $url, [...$changed, 'replace_confirmed' => true, 'expected_version' => 0], $token)->assertConflict();
+        $this->api('POST', $url, [...$changed, 'replace_confirmed' => true], $token)->assertOk()
+            ->assertJsonPath('data.address.location_version', 2)->assertJsonPath('data.address.location_corrected', true);
+        $this->assertSame(14.6, $parcel->address->fresh()->latitude);
+        $this->assertDatabaseCount('delivery_attempts', 1);
+    }
+
+    /** Freshness, real coordinate bounds and explicit review are enforced independently of the client. */
+    public function test_location_validation_and_ownership(): void
+    {
+        $this->freezeTime();
+        $rider = $this->account();
+        $parcel = Parcel::factory()->for($rider)->create();
+        $token = $this->token($rider);
+        $url = '/api/v1/deliveries/'.$parcel->id.'/location';
+        $this->api('POST', '/api/v1/deliveries/'.$parcel->id.'/outcomes', $this->outcome([$parcel], 'delivered'), $token)->assertOk();
+        foreach ([
+            [['captured_at' => now()->subMinutes(6)->toISOString()], 'captured_at'],
+            [['captured_at' => now()->addMinute()->toISOString()], 'captured_at'],
+            [['latitude' => 91], 'latitude'], [['longitude' => -181], 'longitude'],
+            [['gps_latitude' => null], 'gps_latitude'], [['accuracy' => -1], 'accuracy'],
+            [['review_confirmed' => false], 'review_confirmed'], [['expected_version' => -1], 'expected_version'],
+            [['received_at' => now()->toISOString()], 'received_at'],
+        ] as [$change, $field]) {
+            $this->api('POST', $url, [...$this->location(), ...$change], $token)->assertUnprocessable()->assertJsonValidationErrors($field);
+        }
+        $foreign = Parcel::factory()->create();
+        $this->api('POST', '/api/v1/deliveries/'.$foreign->id.'/location', $this->location(), $token)->assertNotFound();
+        $this->api('POST', $url, $this->location())->assertUnauthorized();
+        $this->api('POST', $url, $this->location(), $this->token($this->account(UserRole::Admin)))->assertForbidden();
+        $limited = $rider->createToken('Restricted', ['other'])->plainTextToken;
+        $this->api('POST', $url, $this->location(), $limited)->assertForbidden();
+        $this->assertNull($parcel->address->fresh()->latitude);
+    }
+
+    /** A mutable status alone, without a saved confirmed attempt, is not delivery evidence. */
+    public function test_fabricated_delivered_status_does_not_authorize_gps(): void
+    {
+        $rider = $this->account();
+        $parcel = Parcel::factory()->for($rider)->create(['status' => 'delivered', 'received_at' => now(), 'received_amount' => 11500]);
+        $this->api('POST', '/api/v1/deliveries/'.$parcel->id.'/location', $this->location(), $this->token($rider))
+            ->assertUnprocessable()->assertJsonValidationErrors('delivery');
+    }
+
+    /** Hand-checked Manila coordinates represent a fresh browser reading with an explicit review. */
+    private function location(): array
+    {
+        return ['latitude' => 14.5995, 'longitude' => 120.9842, 'gps_latitude' => 14.5995, 'gps_longitude' => 120.9842,
+            'accuracy' => 12, 'captured_at' => now()->toISOString(), 'review_confirmed' => true, 'expected_version' => 0];
+    }
+
     /** Both intake weeks appear once at a physical address, with native stop pagination. */
     #[DataProvider('entrySizes')]
     public function test_cross_week_stop_pagination_and_private_search(int $size): void

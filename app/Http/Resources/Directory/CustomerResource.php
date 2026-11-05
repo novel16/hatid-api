@@ -35,6 +35,10 @@ class CustomerResource extends JsonResource
             'latitude' => $address->latitude,
             'longitude' => $address->longitude,
             'verified_at' => $address->verified_at?->toISOString(),
+            'gps_accuracy' => $address->gps_accuracy,
+            'gps_captured_at' => $address->gps_captured_at?->toISOString(),
+            'location_corrected' => (bool) $address->location_corrected,
+            'location_version' => (int) $address->location_version,
             'archived_at' => $address->deleted_at?->toISOString(),
         ];
     }

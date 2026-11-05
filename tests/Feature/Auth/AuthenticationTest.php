@@ -12,6 +12,20 @@ use PHPUnit\Framework\Attributes\DataProvider;
 
 class AuthenticationTest extends AuthTestCase
 {
+    /** Signup must persist an explicit rider vehicle rather than silently assuming a car. */
+    public function test_registration_requires_and_restores_a_valid_vehicle(): void
+    {
+        $values = $this->registration();
+        unset($values['vehicle']);
+        $this->api('POST', '/api/v1/auth/register', $values)->assertUnprocessable()->assertJsonValidationErrors('vehicle');
+        $this->api('POST', '/api/v1/auth/register', [...$values, 'vehicle' => 'spaceship'])
+            ->assertUnprocessable()->assertJsonValidationErrors('vehicle');
+        $result = $this->api('POST', '/api/v1/auth/register', [...$values, 'vehicle' => 'motorcycle'])
+            ->assertCreated()->assertJsonPath('data.user.vehicle', 'motorcycle');
+        $this->api('GET', '/api/v1/auth/me', token: $result->json('data.access_token'))
+            ->assertOk()->assertJsonPath('data.vehicle', 'motorcycle');
+    }
+
     /** @return array<string, array{string, string, array<string>}> */
     public static function requiredAuthFields(): array
     {
@@ -136,7 +150,7 @@ class AuthenticationTest extends AuthTestCase
 
         $this->api('GET', $prefix.'/me', token: $response->json('data.access_token'))
             ->assertOk()->assertExactJsonStructure([
-                'data' => ['id', 'name', 'email', 'phone', 'preferences', 'role', 'email_verified_at', 'created_at'],
+                'data' => ['id', 'name', 'email', 'phone', 'vehicle', 'preferences', 'role', 'email_verified_at', 'created_at'],
             ]);
     }
 

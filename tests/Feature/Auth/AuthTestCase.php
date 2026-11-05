@@ -64,6 +64,7 @@ abstract class AuthTestCase extends TestCase
             'password' => self::PASSWORD,
             'password_confirmation' => self::PASSWORD,
             'device_name' => 'Ana phone',
+            'vehicle' => 'motorcycle',
         ];
     }
 }

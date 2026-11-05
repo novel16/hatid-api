@@ -35,4 +35,11 @@ class DeliveryController extends Controller
         return ParcelResource::collection($this->deliveries->outcome($request->user(), $parcel, $request->validated()));
     }
 
+    /** Saves an optional pin independently of the already confirmed delivery and receipt. */
+    public function location(ParcelRequest $request, int $parcel): DeliveryResource
+    {
+        $this->deliveries->saveLocation($request->user(), $parcel, $request->validated());
+
+        return new DeliveryResource($this->deliveries->find($request->user(), $parcel));
+    }
 }

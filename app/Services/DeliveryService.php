@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\CustomerAddress;
 use App\Models\DeliveryAttempt;
 use App\Models\Parcel;
 use App\Models\User;
@@ -16,6 +17,41 @@ use Illuminate\Validation\ValidationException;
 
 final class DeliveryService
 {
+    /** Persists only a reviewed, fresh location backed by this rider's real successful attempt. */
+    public function saveLocation(User $rider, int $parcelId, array $values): void
+    {
+        /** Use the same owner-first lock order as money outcomes; this transaction never changes receipts. */
+        DB::transaction(function () use ($rider, $parcelId, $values): void {
+            User::whereKey($rider->id)->lockForUpdate()->firstOrFail();
+            $parcel = $rider->parcels()->findOrFail($parcelId);
+            $evidence = $parcel->attempts()->where('outcome', 'delivered')->first();
+            if ($parcel->status !== 'delivered' || ! $parcel->received_at || $parcel->received_amount !== $parcel->customer_total || ! $evidence) {
+                throw ValidationException::withMessages(['delivery' => 'Confirm a successful delivery and full receipt before saving this address location.']);
+            }
+            $captured = CarbonImmutable::parse($values['captured_at'])->utc();
+            if ($captured->lt($parcel->received_at->subSeconds(5))) {
+                throw ValidationException::withMessages(['captured_at' => 'Take a fresh location reading after the successful handover.']);
+            }
+            $address = CustomerAddress::withTrashed()->whereKey($parcel->customer_address_id)
+                ->where('customer_id', $parcel->customer_id)
+                /** Even a corrupted parcel relation cannot authorize another rider's address. */
+                ->whereHas('customer', fn (Builder $customer) => $customer->withTrashed()->where('user_id', $rider->id))
+                ->lockForUpdate()->firstOrFail();
+            abort_unless((int) $address->location_version === (int) $values['expected_version'], 409, 'This pin changed on another device. Refresh the stop and review its current pin.');
+            if ($address->latitude !== null && $address->longitude !== null && ! ($values['replace_confirmed'] ?? false)) {
+                throw ValidationException::withMessages(['replace_confirmed' => 'Explicitly confirm replacing this address’s saved pin.']);
+            }
+            $address->forceFill([
+                'latitude' => $values['latitude'], 'longitude' => $values['longitude'],
+                'gps_accuracy' => $values['accuracy'], 'gps_captured_at' => $captured,
+                'location_corrected' => abs((float) $values['latitude'] - (float) $values['gps_latitude']) > 0.00000005
+                    || abs((float) $values['longitude'] - (float) $values['gps_longitude']) > 0.00000005,
+                'verified_at' => now(), 'verified_delivery_attempt_id' => $evidence->id,
+                'location_version' => $address->location_version + 1,
+            ])->save();
+        }, 3);
+    }
+
     /** Paginates physical stops, applying every filter to the same owned parcel. */
     public function paginate(User $rider, array $filters): LengthAwarePaginator
     {

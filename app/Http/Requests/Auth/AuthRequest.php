@@ -17,7 +17,9 @@ class AuthRequest extends FormRequest
         return true;
     }
 
-    /** @return array<string, array<mixed>> */
+    /** Validate the current auth action, requiring an explicit allowed vehicle only for rider signup.
+     * @return array<string, array<mixed>>
+     */
     public function rules(): array
     {
         $email = ['required', 'string', 'email:rfc', 'max:255'];
@@ -27,6 +29,7 @@ class AuthRequest extends FormRequest
         return match ($this->route()->getActionMethod()) {
             'register' => [
                 'name' => ['required', 'string', 'max:255'],
+                'vehicle' => ['required', 'string', Rule::in(User::VEHICLES)],
                 'email' => [...$email, Rule::unique(User::class, 'email')],
                 'password' => $this->newPasswordRules(),
                 'device_name' => $deviceName,

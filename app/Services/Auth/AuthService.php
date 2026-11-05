@@ -21,14 +21,18 @@ final class AuthService
         private readonly Timebox $timebox,
     ) {}
 
+    /** Creates a rider with their explicit primary vehicle and an expiring Bearer token. */
     public function register(
         string $name,
         string $email,
         #[SensitiveParameter] string $password,
         string $deviceName,
+        string $vehicle,
     ): NewAccessToken {
-        return DB::transaction(function () use ($name, $email, $password, $deviceName): NewAccessToken {
+        /** Save the profile and issued token as one transaction. */
+        return DB::transaction(function () use ($name, $email, $password, $deviceName, $vehicle): NewAccessToken {
             $user = $this->createUser($name, $email, $password, UserRole::Rider);
+            $user->forceFill(['vehicle' => $vehicle])->save();
 
             return $this->tokens->issue($user, $deviceName);
         });

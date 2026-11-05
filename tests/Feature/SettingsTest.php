@@ -10,6 +10,25 @@ use Tests\Feature\Auth\AuthTestCase;
 
 class SettingsTest extends AuthTestCase
 {
+    /** Legacy riders can keep working, then choose or change their routing vehicle in Settings. */
+    public function test_vehicle_completion_is_owned_and_does_not_change_other_preferences(): void
+    {
+        $user = $this->account();
+        $other = $this->account();
+        $token = $this->token($user);
+        $this->api('GET', '/api/v1/auth/me', token: $token)->assertOk()->assertJsonPath('data.vehicle', null);
+        foreach (['bicycle', 'car', 'motorcycle'] as $vehicle) {
+            $this->api('PATCH', '/api/v1/settings', ['vehicle' => $vehicle], $token)->assertOk()->assertJsonPath('data.vehicle', $vehicle);
+        }
+        foreach ([null, '', 'truck', ['car']] as $invalid) {
+            $this->api('PATCH', '/api/v1/settings', ['vehicle' => $invalid], $token)
+                ->assertUnprocessable()->assertJsonValidationErrors('vehicle');
+        }
+        $this->api('GET', '/api/v1/auth/me', token: $token)->assertOk()->assertJsonPath('data.vehicle', 'motorcycle');
+        $this->assertNull($other->fresh()->vehicle);
+        $this->assertTrue($user->fresh()->settingPreferences()['deliveryAlerts']);
+    }
+
     /** Existing accounts receive safe defaults without exposing stored internals. */
     public function test_account_settings_have_defaults_and_controlled_serialization(): void
     {

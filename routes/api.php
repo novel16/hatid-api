@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\BatchController;
 use App\Http\Controllers\Api\V1\DeliveryController;
 use App\Http\Controllers\Api\V1\Directory\CustomerController;
 use App\Http\Controllers\Api\V1\Directory\SellerController;
+use App\Http\Controllers\Api\V1\MapController;
 use App\Http\Controllers\Api\V1\ParcelController;
 use App\Http\Controllers\Api\V1\SettingsController;
 use Illuminate\Support\Facades\Route;
@@ -40,11 +41,16 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
     // Protect private rider features with the same real Bearer/role/ability checks as auth.
     Route::middleware(['auth:sanctum', 'role:rider', 'abilities:rider:access', 'throttle:authenticated'])->group(function (): void {
         Route::patch('settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::get('map', [MapController::class, 'show'])->name('map.show');
+        Route::post('map/recommendations', [MapController::class, 'recommend'])->name('map.recommend');
+        Route::get('map/tiles/{z}/{x}/{y}', [MapController::class, 'tile'])->whereNumber(['z', 'x', 'y'])
+            ->withoutMiddleware('throttle:authenticated')->middleware('throttle:map-tiles')->name('map.tile');
         Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
         Route::apiResource('parcels', ParcelController::class)->only(['store', 'show']);
         Route::get('deliveries', [DeliveryController::class, 'index'])->name('deliveries.index');
         Route::get('deliveries/{parcel}', [DeliveryController::class, 'show'])->name('deliveries.show');
         Route::post('deliveries/{parcel}/outcomes', [DeliveryController::class, 'outcome'])->name('deliveries.outcomes');
+        Route::post('deliveries/{parcel}/location', [DeliveryController::class, 'location'])->name('deliveries.location');
         Route::apiResource('customers', CustomerController::class);
         Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
         Route::post('customers/{customer}/addresses', [CustomerController::class, 'storeAddress'])->name('customers.addresses.store');

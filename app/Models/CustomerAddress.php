@@ -23,9 +23,11 @@ class CustomerAddress extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    /** Casts read-only GPS data without enabling mass assignment. */
+    /** Casts delivery-verified GPS metadata without enabling directory mass assignment. */
     protected function casts(): array
     {
-        return ['latitude' => 'float', 'longitude' => 'float', 'verified_at' => 'datetime'];
+        return ['latitude' => 'float', 'longitude' => 'float', 'verified_at' => 'immutable_datetime',
+            'gps_accuracy' => 'float', 'gps_captured_at' => 'immutable_datetime',
+            'location_version' => 'integer', 'location_corrected' => 'boolean'];
     }
 }

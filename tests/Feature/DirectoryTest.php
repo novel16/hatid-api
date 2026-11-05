@@ -59,12 +59,16 @@ class DirectoryTest extends AuthTestCase
         if ($this->isCustomer($path)) {
             $address = $record['addresses'][0];
             $this->assertEqualsCanonicalizing(
-                ['id', 'label', 'text', 'latitude', 'longitude', 'verified_at', 'archived_at'],
+                ['id', 'label', 'text', 'latitude', 'longitude', 'verified_at', 'gps_accuracy', 'gps_captured_at', 'location_corrected', 'location_version', 'archived_at'],
                 array_keys($address),
             );
             $this->assertSame('Home', $address['label']);
             $this->assertNull($address['latitude']);
             $this->assertNull($address['longitude']);
+            $this->assertNull($address['gps_accuracy']);
+            $this->assertNull($address['gps_captured_at']);
+            $this->assertFalse($address['location_corrected']);
+            $this->assertSame(0, $address['location_version']);
         } else {
             $this->assertSame(1500, $record['fee']);
         }

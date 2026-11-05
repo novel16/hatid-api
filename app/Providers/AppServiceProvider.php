@@ -20,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
         //
     }
 
+    /** Configure password rules, independent request limits and account-specific recovery links. */
     public function boot(): void
     {
         Password::defaults(fn (): Password => Password::min(12)->mixedCase()->numbers());
@@ -37,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('registration', fn (Request $request): Limit => Limit::perMinute(5)->by($request->ip()));
         RateLimiter::for('password-recovery', fn (Request $request): Limit => Limit::perMinute(5)->by($request->ip()));
         RateLimiter::for('authenticated', fn (Request $request): Limit => Limit::perMinute(120)->by((string) $request->user()->getAuthIdentifier()));
+        RateLimiter::for('map-tiles', /** Tile panning cannot consume the bucket needed by manual handovers. */ fn (Request $request): Limit => Limit::perMinute(300)->by((string) $request->user()->getAuthIdentifier()));
 
         ResetPassword::createUrlUsing(function (User $user, string $token): string {
             $client = $user->role === UserRole::Admin ? 'admin_url' : 'rider_url';

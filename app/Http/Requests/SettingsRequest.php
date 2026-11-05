@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SettingsRequest extends FormRequest
 {
@@ -20,6 +22,7 @@ class SettingsRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'min:2', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'vehicle' => ['sometimes', 'required', 'string', Rule::in(User::VEHICLES)],
             'preferences' => ['sometimes', 'array:deliveryAlerts,collectionAlerts,compactView', 'min:1'],
             'preferences.deliveryAlerts' => ['sometimes', 'required', 'boolean'],
             'preferences.collectionAlerts' => ['sometimes', 'required', 'boolean'],

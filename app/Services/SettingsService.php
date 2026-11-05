@@ -13,13 +13,13 @@ final class SettingsService
     /**
      * Merges partial preferences under an account lock so independent saves cannot overwrite each other.
      *
-     * @param  array{name?: string, phone?: ?string, preferences?: array<string, bool|int|string>}  $values
+     * @param  array{name?: string, phone?: ?string, vehicle?: string, preferences?: array<string, bool|int|string>}  $values
      */
     public function update(User $user, array $values): User
     {
         return DB::transaction(function () use ($user, $values): User {
             $account = User::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail();
-            $changes = Arr::only($values, ['name', 'phone']);
+            $changes = Arr::only($values, ['name', 'phone', 'vehicle']);
             if (isset($values['preferences'])) {
                 $changes['preferences'] = array_replace($account->settingPreferences(), $values['preferences']);
             }

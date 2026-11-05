@@ -15,10 +15,21 @@ class ParcelRequest extends FormRequest
         return true;
     }
 
-    /** Allowlists intake, list filters and manual outcomes. */
+    /** Allowlists intake, list filters, outcomes or a separately reviewed delivery-verified location. */
     public function rules(): array
     {
         $action = $this->route()->getActionMethod();
+        if ($action === 'location') {
+            return [
+                ...MapRequest::readingRules(),
+                'gps_latitude' => ['required', 'numeric', 'between:-90,90'],
+                'gps_longitude' => ['required', 'numeric', 'between:-180,180'],
+                'review_confirmed' => ['required', 'accepted'],
+                'replace_confirmed' => ['sometimes', 'boolean'],
+                'expected_version' => ['required', 'integer', 'min:0'],
+                'user_id' => ['prohibited'], 'address_id' => ['prohibited'], 'received_at' => ['prohibited'],
+            ];
+        }
         $protected = array_fill_keys(['user_id', 'rider_id', 'id', 'receipt', 'received_at', 'customer_total', 'seller_share', 'pricing', 'latitude', 'longitude'], ['prohibited']);
         if ($action === 'index') {
             return [

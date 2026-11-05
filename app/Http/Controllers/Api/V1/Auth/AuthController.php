@@ -26,6 +26,7 @@ class AuthController extends Controller
         private readonly PasswordService $passwords,
     ) {}
 
+    /** Pass only validated rider identity, vehicle and credentials to the auth service. */
     public function register(AuthRequest $request): JsonResponse
     {
         $token = $this->auth->register(
@@ -33,6 +34,7 @@ class AuthController extends Controller
             $request->validated('email'),
             $request->validated('password'),
             $request->validated('device_name'),
+            $request->validated('vehicle'),
         );
 
         return (new AuthSessionResource($token))->response()->setStatusCode(201);
