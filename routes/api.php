@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\DeliveryController;
 use App\Http\Controllers\Api\V1\Directory\CustomerController;
 use App\Http\Controllers\Api\V1\Directory\SellerController;
 use App\Http\Controllers\Api\V1\MapController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ParcelController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SettingsController;
@@ -44,6 +45,10 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
     // Protect private rider features with the same real Bearer/role/ability checks as auth.
     Route::middleware(['auth:sanctum', 'role:rider', 'abilities:rider:access', 'throttle:authenticated'])->group(function (): void {
         Route::patch('settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+        Route::patch('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+        Route::patch('notifications/{notification}/read', [NotificationController::class, 'read'])->whereUuid('notification')->name('notifications.read');
         Route::get('dashboard', [ReportController::class, 'dashboard'])->name('dashboard');
         Route::get('reports/earnings', [ReportController::class, 'index'])->name('reports.earnings');
         Route::get('reports/earnings/export', [ReportController::class, 'export'])->name('reports.earnings.export');

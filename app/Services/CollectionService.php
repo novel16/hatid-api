@@ -15,6 +15,9 @@ use Illuminate\Validation\ValidationException;
 
 final class CollectionService
 {
+    /** Reuse the current money transaction for one replay-safe in-app handover alert. */
+    public function __construct(private readonly NotificationService $notifications) {}
+
     /** Only actual full successful receipts contribute to collections, fees or seller debt. */
     private function receipts(User $rider): Builder
     {
@@ -157,7 +160,7 @@ final class CollectionService
 
         /** Match Deliveries' rider-first lock so simultaneous receipts/handovers share one money boundary. */
         return DB::transaction(function () use ($rider, $values, $payload, $hash): Remittance {
-            User::whereKey($rider->id)->lockForUpdate()->firstOrFail();
+            $account = User::whereKey($rider->id)->lockForUpdate()->firstOrFail();
             $previous = $rider->remittances()->where('operation_id', $values['operation_id'])->first();
             if ($previous) {
                 abort_unless(hash_equals($previous->request_hash, $hash), 409, 'This operation already recorded a different handover. Review its saved history.');
@@ -192,6 +195,7 @@ final class CollectionService
             foreach (array_chunk($allocations, 100, true) as $chunk) {
                 $record->parcels()->attach($chunk);
             }
+            $this->notifications->remittance($account, $record);
 
             return $record->load('seller')->loadCount('parcels');
         }, 3);

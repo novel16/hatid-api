@@ -6,6 +6,8 @@ Laravel 13.39 / PHP 8.4 / Sanctum 4.3.3. This API serves the rider PWA and the s
 
 ## Native Windows development
 
+Notifications & Activity was connected6 November; its endpoints and verification are documented below. Only its additive notifications migration is needed when updating an existing checkout. Normal deployments must run pending migrations before enabling the new application code; publishing itself does not run them on another environment.
+
 The active project is C:/Users/Novel/Desktop/laravel projects/hatid/api. PHP8.4.27 runs from XAMPP, with the API at http://127.0.0.1:8000 and the rider client at http://localhost:3011. In Git Bash:
 
 ```bash
@@ -36,6 +38,25 @@ AuthRequest chooses rules by the server-side controller action. When adding or r
 UserRole is a backed enum. Every protected route requires a valid personal access token, the correct database role and the matching token ability. A role change does not upgrade an old token. Public registration can create riders only.
 
 The API is session-free: pass Authorization: Bearer, omit cookies, and do not call /sanctum/csrf-cookie. Sanctum stateful domains and session fallback guards are empty; its cookie endpoint is disabled. Tokens are hashed, stored in the database, expire and can be revoked. They are not self-contained JWTs.
+
+## Rider in-app notifications — 6 November
+
+| Route | Behavior |
+|---|---|
+| GET /api/v1/notifications | Owned paginated alerts, full unread_count; state=all/unread, page>=1, per_page1..100(default10) |
+| GET /api/v1/notifications/unread-count | Small owned unread count for the workspace bell |
+| PATCH /api/v1/notifications/{uuid}/read | Owned-only read confirmation; preserve the first server timestamp |
+| PATCH /api/v1/notifications/read-all | Mark all currently owned unread alerts across pages;204 |
+
+The existing rider Bearer/role/ability middleware and private response policy protect all four routes. User/owner/read_at/data/target overrides are prohibited. Future unrelated framework notification types stay outside this inbox. NotificationResource exposes only id, category, title, message, a fixed target(kind/id), read_at and created_at; no raw data/owner identifiers/URLs.
+
+Use Laravel's installed DatabaseNotification and the existing User::notifications relation. No custom model, notification class, event/listener, queue, provider or dependency. The new table stores private read state and owner/unread/date indexes. NotificationService is called after replay validation, inside the existing DeliveryService/CollectionService transaction. Invalid or rolled-back business actions leave no alerts; an insert failure rolls the whole action back, and identical retries never duplicate alerts.
+
+Preferences are read from the latest locked rider row, not a stale caller. At most one alert appears for each grouped outcome. On delivered/full manually confirmed receipts, collectionAlerts produces a combined delivery/payment alert; if only deliveryAlerts is enabled, a delivery-only alert is used. Held/failed/resumed/returned activity uses deliveryAlerts. Recorded remittances use collectionAlerts. Both toggles off suppress new alerts; old alerts, attempts, receipts and remittance evidence remain. Re-enabling does not backfill. This is in-app activity, with no external payment verification, transfer, browser push, due-hold scheduling or historical backfill.
+
+New application files: NotificationRequest validates controls; NotificationService owns creation/query/read behavior; NotificationController delegates HTTP; NotificationResource allowlists output. Support files:2026_11_06_050025_create_notifications_table.php and NotificationTest.php. Review route → request → service/two transaction callers → resource → tests. Native additive migration applied52.31ms, with no reset/seed or existing financial/credential changes.
+
+Verified:31 notification cases/178 assertions; full253 API tests/1870 assertions in isolated SQLite; Pint and diff checks. Tests cover ownership/notifiable types/role/ability/expiry, all UI page sizes, read-state idempotence, current preferences, grouped outcomes, replay and atomic insertion failure. Native missing-Bearer GET/PATCH routes return401 without cookies. No simultaneous native-write execution is claimed. User API/dev servers remain running.
 
 ## Actual earnings reports and dashboard — 5 November
 

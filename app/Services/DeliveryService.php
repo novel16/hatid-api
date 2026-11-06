@@ -17,6 +17,9 @@ use Illuminate\Validation\ValidationException;
 
 final class DeliveryService
 {
+    /** Save in-app activity in the same transaction as the existing confirmed outcome. */
+    public function __construct(private readonly NotificationService $notifications) {}
+
     /** Persists only a reviewed, fresh location backed by this rider's real successful attempt. */
     public function saveLocation(User $rider, int $parcelId, array $values): void
     {
@@ -136,7 +139,7 @@ final class DeliveryService
 
         /** One owned transaction prevents simultaneous devices collecting the same parcel twice. */
         return DB::transaction(function () use ($rider, $parcelId, $values, $ids, $receipts, $retry, $hash): Collection {
-            User::whereKey($rider->id)->lockForUpdate()->firstOrFail();
+            $account = User::whereKey($rider->id)->lockForUpdate()->firstOrFail();
             $anchor = $rider->parcels()->findOrFail($parcelId);
             $selected = $rider->parcels()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
             abort_unless($selected->count() === count($ids), 404);
@@ -198,6 +201,7 @@ final class DeliveryService
                     'outcome' => $outcome, 'note' => $values['note'], 'retry_at' => $retry,
                 ]);
             }
+            $this->notifications->delivery($account, $anchor->id, $outcome, $selected->count());
 
             return $selected->load(['customer', 'address', 'seller', 'batch', 'attempts']);
         }, 3);
