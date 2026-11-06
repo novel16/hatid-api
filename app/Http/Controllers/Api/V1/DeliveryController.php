@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ParcelRequest;
 use App\Http\Resources\DeliveryResource;
 use App\Http\Resources\ParcelResource;
+use App\Http\Resources\RecoveryResource;
 use App\Services\DeliveryService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -41,5 +42,11 @@ class DeliveryController extends Controller
         $this->deliveries->saveLocation($request->user(), $parcel, $request->validated());
 
         return new DeliveryResource($this->deliveries->find($request->user(), $parcel));
+    }
+
+    /** Original attempt evidence, rather than today's parcel status, confirms a recovered outcome. */
+    public function recoverOutcome(ParcelRequest $request, int $parcel): RecoveryResource
+    {
+        return new RecoveryResource($this->deliveries->recover($request->user(), $parcel, $request->validated()));
     }
 }

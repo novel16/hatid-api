@@ -56,6 +56,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
         Route::get('collections/sellers', [CollectionController::class, 'sellers'])->name('collections.sellers');
         Route::get('remittances', [CollectionController::class, 'history'])->name('remittances.index');
         Route::post('remittances', [CollectionController::class, 'store'])->name('remittances.store');
+        Route::post('remittances/recovery', [CollectionController::class, 'recover'])->name('remittances.recovery');
         Route::get('remittances/{remittance}', [CollectionController::class, 'show'])->name('remittances.show');
         Route::get('map', [MapController::class, 'show'])->name('map.show');
         Route::post('map/recommendations', [MapController::class, 'recommend'])->name('map.recommend');
@@ -63,9 +64,11 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
             ->withoutMiddleware('throttle:authenticated')->middleware('throttle:map-tiles')->name('map.tile');
         Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
         Route::apiResource('parcels', ParcelController::class)->only(['store', 'show']);
+        Route::post('parcels/recovery', [ParcelController::class, 'recover'])->name('parcels.recovery');
         Route::get('deliveries', [DeliveryController::class, 'index'])->name('deliveries.index');
         Route::get('deliveries/{parcel}', [DeliveryController::class, 'show'])->name('deliveries.show');
         Route::post('deliveries/{parcel}/outcomes', [DeliveryController::class, 'outcome'])->name('deliveries.outcomes');
+        Route::post('deliveries/{parcel}/recovery', [DeliveryController::class, 'recoverOutcome'])->name('deliveries.recovery');
         Route::post('deliveries/{parcel}/location', [DeliveryController::class, 'location'])->name('deliveries.location');
         Route::apiResource('customers', CustomerController::class);
         Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');

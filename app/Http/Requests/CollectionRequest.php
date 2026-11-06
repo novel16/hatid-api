@@ -24,7 +24,7 @@ class CollectionRequest extends FormRequest
             'received_at' => ['prohibited'], 'recorded_at' => ['prohibited'],
         ];
         $action = $this->route()->getActionMethod();
-        if ($action === 'store') {
+        if (in_array($action, ['store', 'recover'], true)) {
             return [
                 ...$protected,
                 'operation_id' => ['required', 'uuid'], 'seller_id' => ['required', 'integer', 'min:1'],

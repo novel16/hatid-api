@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CollectionRequest;
 use App\Http\Resources\Directory\SellerResource;
 use App\Http\Resources\ParcelResource;
+use App\Http\Resources\RecoveryResource;
 use App\Http\Resources\RemittanceResource;
 use App\Services\CollectionService;
 use Illuminate\Http\JsonResponse;
@@ -52,5 +53,11 @@ class CollectionController extends Controller
     {
         return (new RemittanceResource($this->collections->record($request->user(), $request->validated())))
             ->response()->setStatusCode(201);
+    }
+
+    /** Inspect a saved handover without using current balances as proof of an earlier result. */
+    public function recover(CollectionRequest $request): RecoveryResource
+    {
+        return new RecoveryResource($this->collections->recover($request->user(), $request->validated()));
     }
 }

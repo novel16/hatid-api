@@ -11,14 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 final class ParcelService
 {
-    /** Eager-loads controlled history and allows archived directory data for existing work. */
-    public function find(User $rider, int $parcelId): Parcel
-    {
-        return $rider->parcels()->with(['customer', 'address', 'seller', 'batch', 'attempts'])->findOrFail($parcelId);
-    }
-
-    /** Saves one reviewed price snapshot; a lost response may safely retry the same operation. */
-    public function create(User $rider, array $values): Parcel
+    /** Keep original write and recovery checks on exactly the same canonical intake fields. */
+    private function submission(array $values): array
     {
         $normalized = [
             'batch_id' => (int) $values['batch_id'], 'customer_id' => (int) $values['customer_id'],
@@ -28,7 +22,30 @@ final class ParcelService
             'quote' => (int) $values['quote'], 'fee' => (int) $values['fee'],
             'override_reason' => $values['override_reason'] ?? null,
         ];
-        $hash = hash('sha256', json_encode($normalized, JSON_THROW_ON_ERROR));
+
+        return ['values' => $normalized, 'hash' => hash('sha256', json_encode($normalized, JSON_THROW_ON_ERROR))];
+    }
+
+    /** A missing match is not cancellation; this only recognizes owned, identical saved intake. */
+    public function recover(User $rider, array $values): ?Parcel
+    {
+        $submission = $this->submission($values);
+        $existing = $rider->parcels()->where('operation_id', $values['operation_id'])->first();
+        abort_if($existing && ! hash_equals($existing->submission_hash, $submission['hash']), 409, 'This operation saved different parcel details. Review the existing records.');
+
+        return $existing;
+    }
+
+    /** Eager-loads controlled history and allows archived directory data for existing work. */
+    public function find(User $rider, int $parcelId): Parcel
+    {
+        return $rider->parcels()->with(['customer', 'address', 'seller', 'batch', 'attempts'])->findOrFail($parcelId);
+    }
+
+    /** Saves one reviewed price snapshot; a lost response may safely retry the same operation. */
+    public function create(User $rider, array $values): Parcel
+    {
+        ['values' => $normalized, 'hash' => $hash] = $this->submission($values);
 
         /** Serialize only this rider's writes, including a duplicate request arriving before its first response. */
         return DB::transaction(function () use ($rider, $values, $normalized, $hash): Parcel {

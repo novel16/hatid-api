@@ -119,8 +119,8 @@ final class DeliveryService
             ->with(['customer', 'address', 'seller', 'batch', 'attempts'])->orderBy('id')->get();
     }
 
-    /** Atomically records only selected parcels, one full receipt each, with replay-safe evidence. */
-    public function outcome(User $rider, int $parcelId, array $values): Collection
+    /** Share selection, timestamp and receipt normalization between original writes and status checks. */
+    private function submission(array $values): array
     {
         $ids = array_map(intval(...), $values['parcel_ids']);
         sort($ids);
@@ -136,6 +136,37 @@ final class DeliveryService
             'ids' => $ids, 'outcome' => $values['outcome'], 'note' => $values['note'],
             'retry' => $retry?->toIso8601String(), 'receipts' => $receipts->values()->all(),
         ], JSON_THROW_ON_ERROR));
+
+        return ['ids' => $ids, 'receipts' => $receipts, 'retry' => $retry, 'hash' => $hash];
+    }
+
+    /** Recognizes original attempt evidence even after a later hold/resume, without appending a visit. */
+    public function recover(User $rider, int $parcelId, array $values): ?DeliveryAttempt
+    {
+        $submission = $this->submission($values);
+
+        /** One read snapshot cannot mix partial observations from a concurrent grouped outcome. */
+        return DB::transaction(function () use ($rider, $parcelId, $values, $submission): ?DeliveryAttempt {
+            $anchor = $rider->parcels()->findOrFail($parcelId);
+            $previous = DeliveryAttempt::where('operation_id', $values['operation_id'])
+                ->whereHas('parcel', /** Foreign UUIDs never reveal another rider's evidence. */ fn (Builder $parcel) => $parcel->where('user_id', $rider->id))
+                ->with('parcel')->orderBy('id')->get();
+            if ($previous->isEmpty()) {
+                return null;
+            }
+            abort_unless($previous->count() === count($submission['ids']) && ! $previous->contains(
+                /** Matching UUIDs require the original normalized payload and physical stop. */ fn (DeliveryAttempt $attempt): bool => ! hash_equals($attempt->request_hash, $submission['hash'])
+                                    || $attempt->parcel->customer_id !== $anchor->customer_id || $attempt->parcel->customer_address_id !== $anchor->customer_address_id,
+            ), 409, 'This operation saved different delivery evidence. Review the existing stop.');
+
+            return $previous->first();
+        });
+    }
+
+    /** Atomically records only selected parcels, one full receipt each, with replay-safe evidence. */
+    public function outcome(User $rider, int $parcelId, array $values): Collection
+    {
+        ['ids' => $ids, 'receipts' => $receipts, 'retry' => $retry, 'hash' => $hash] = $this->submission($values);
 
         /** One owned transaction prevents simultaneous devices collecting the same parcel twice. */
         return DB::transaction(function () use ($rider, $parcelId, $values, $ids, $receipts, $retry, $hash): Collection {

@@ -1,5 +1,11 @@
 # Hatid API
 
+## Read-only recovery probes — 6 November
+
+POST `/api/v1/parcels/recovery`, `/api/v1/deliveries/{parcel}/recovery` and `/api/v1/remittances/recovery` accept the original validated operation body through the rider Bearer/role/ability middleware. Existing services share their exact write canonicalizer with the probe, query owned UUID evidence and reject changed payloads with409. They recognize original attempts after a later resume and remittances after settlement, without creating another business record or alert. A missing match returns not_recorded and does not cancel an earlier request.
+
+New application source: `app/Http/Resources/RecoveryResource.php`, allowlisting state, target kind/id and original confirmation time. New test support: `tests/Feature/RecoveryTest.php`. Read routes/api.php → existing ParcelRequest/CollectionRequest → existing controller recover method → service recover/submission → RecoveryResource → RecoveryTest. No migration/dependency/seed/native data change is needed. Full API suite passed266tests/1964assertions; Pint passed. Existing write behavior/history/receipt allocation is unchanged.
+
 Publishing authorization updated5 November: the user now includes this API repository in the main-branch push, with separate feature commits for the accumulated implementation. This supersedes earlier local-only notes for completed stages below. Private .env/keys, developer database contents, vendor and generated output remain local. Publishing applies no new migrations or seed operations and preserves the running servers.
 
 Laravel 13.39 / PHP 8.4 / Sanctum 4.3.3. This API serves the rider PWA and the separate admin app.

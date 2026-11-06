@@ -149,14 +149,32 @@ final class CollectionService
         return ['remittance' => $record, 'allocations' => $allocations];
     }
 
-    /** Records the actual handover exactly once, allocating oldest outstanding seller shares first. */
-    public function record(User $rider, array $values): Remittance
+    /** Share exact money/reference normalization between original handovers and recovery checks. */
+    private function submission(array $values): array
     {
         $payload = [
             'seller_id' => (int) $values['seller_id'], 'amount' => $values['amount'], 'method' => $values['method'],
             'reference' => ($values['reference'] ?? '') !== '' ? $values['reference'] : null,
         ];
         $hash = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+
+        return ['payload' => $payload, 'hash' => $hash];
+    }
+
+    /** Confirm original evidence before considering today's balance; this never records a handover. */
+    public function recover(User $rider, array $values): ?Remittance
+    {
+        $submission = $this->submission($values);
+        $previous = $rider->remittances()->where('operation_id', $values['operation_id'])->first();
+        abort_if($previous && ! hash_equals($previous->request_hash, $submission['hash']), 409, 'This operation saved a different handover. Review its history.');
+
+        return $previous;
+    }
+
+    /** Records the actual handover exactly once, allocating oldest outstanding seller shares first. */
+    public function record(User $rider, array $values): Remittance
+    {
+        ['payload' => $payload, 'hash' => $hash] = $this->submission($values);
 
         /** Match Deliveries' rider-first lock so simultaneous receipts/handovers share one money boundary. */
         return DB::transaction(function () use ($rider, $values, $payload, $hash): Remittance {

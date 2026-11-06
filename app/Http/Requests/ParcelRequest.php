@@ -19,6 +19,9 @@ class ParcelRequest extends FormRequest
     public function rules(): array
     {
         $action = $this->route()->getActionMethod();
+        if ($action === 'recoverOutcome') {
+            $action = 'outcome';
+        }
         if ($action === 'location') {
             return [
                 ...MapRequest::readingRules(),

@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ParcelRequest;
 use App\Http\Resources\ParcelResource;
+use App\Http\Resources\RecoveryResource;
 use App\Services\ParcelService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,5 +28,11 @@ class ParcelController extends Controller
     public function show(Request $request, int $parcel): ParcelResource
     {
         return new ParcelResource($this->parcels->find($request->user(), $parcel));
+    }
+
+    /** Only inspect owned canonical evidence; a POST body keeps private draft fields out of URLs. */
+    public function recover(ParcelRequest $request): RecoveryResource
+    {
+        return new RecoveryResource($this->parcels->recover($request->user(), $request->validated()));
     }
 }
