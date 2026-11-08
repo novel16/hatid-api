@@ -1,5 +1,9 @@
 # Hatid API development rules
 
+## Current Admin Rider Directory
+
+Use a protected `GET /api/v1/admin/riders` for the approved read-only directory. Reuse admin Bearer role and ability checks. Scope the query to riders, validate search, vehicle and the 10/50/100 page sizes, and serialize only the approved profile fields through a Resource collection. Keep account status changes in their separate feature. Existing API main publishing authorization applies. Run sequential checks with isolated test data.
+
 ## Current Draft Autosave & Recovery — 6 November
 
 The user approved recovering interrupted parcel/outcome/remittance submissions. Reuse original service canonicalization and expose protected read-only POST parcels/recovery, deliveries/{parcel}/recovery and remittances/recovery through existing requests/controllers plus RecoveryResource. Enforce Bearer/role/ability/ownership and hash equality, return only confirmed/not_recorded with kind/id/original time, and never create attempts/receipts/allocations/alerts during a probe. Earlier holds and settled handovers remain recognizable; not_recorded does not cancel delayed writes. No new dependency, table, migration, seed, credentials or runtime changes are required. Main feature commits/pushes remain authorized; preserve native data and servers.

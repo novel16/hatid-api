@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\V1\Admin\RiderController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\BatchController;
 use App\Http\Controllers\Api\V1\CollectionController;
@@ -80,10 +81,15 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
         Route::post('sellers/{seller}/restore', [SellerController::class, 'restore'])->name('sellers.restore');
     });
 
-    Route::prefix('admin/auth')->name('admin.auth.')->group(function () use ($authenticatedRoutes): void {
-        Route::post('login', [AuthController::class, 'adminLogin'])->middleware('throttle:login')->name('login');
+    /** Keep the existing admin login path and share authorization across the workspace. */
+    Route::prefix('admin')->name('admin.')->group(function () use ($authenticatedRoutes): void {
+        Route::post('auth/login', [AuthController::class, 'adminLogin'])->middleware('throttle:login')->name('auth.login');
 
+        /** Require the same administrator role and token scope for auth and directory reads. */
         Route::middleware(['auth:sanctum', 'role:admin', 'abilities:admin:access', 'throttle:authenticated'])
-            ->group($authenticatedRoutes);
+            ->group(function () use ($authenticatedRoutes): void {
+                Route::prefix('auth')->name('auth.')->group($authenticatedRoutes);
+                Route::get('riders', [RiderController::class, 'index'])->name('riders.index');
+            });
     });
 });
