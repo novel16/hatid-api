@@ -195,15 +195,17 @@ fi
 ip=$(aws ec2 describe-addresses --filters "Name=instance-id,Values=$instance" \
     --query 'Addresses[0].PublicIp' --output text)
 if [[ $ip == None ]]; then
-    address=$(aws ec2 allocate-address --domain vpc \
-        --tag-specifications 'ResourceType=elastic-ip,Tags=[{Key=Name,Value=hatid-api}]' \
-        --output json)
-    allocation=$(jq -er .AllocationId <<< "$address")
-    if ! aws ec2 associate-address --instance-id "$instance" --allocation-id "$allocation" \
-        --no-allow-reassociation >/dev/null; then
-        aws ec2 release-address --allocation-id "$allocation"
-        exit 1
+    address=$(aws ec2 describe-addresses --filters "Name=tag:HatidInstance,Values=$instance" \
+        --query 'Addresses' --output json |
+        jq -c '[.[] | select(.AssociationId == null)] | first // null')
+    if [[ $address == null ]]; then
+        address=$(aws ec2 allocate-address --domain vpc \
+            --tag-specifications "ResourceType=elastic-ip,Tags=[{Key=Name,Value=hatid-api},{Key=HatidInstance,Value=$instance}]" \
+            --output json)
     fi
+    allocation=$(jq -er .AllocationId <<< "$address")
+    aws ec2 associate-address --instance-id "$instance" --allocation-id "$allocation" \
+        --no-allow-reassociation >/dev/null
     ip=$(jq -er .PublicIp <<< "$address")
 fi
 
