@@ -54,8 +54,12 @@ if (( free_kib < 350000 )); then
 fi
 
 stage=$(mktemp -d "$root/.stage.XXXXXXXX")
+candidate=
 # Remove temporary material from this attempt even if a check fails.
 cleanup() {
+    if [[ -n $candidate && $(readlink -e "$root/current" || true) != "$candidate" ]]; then
+        rm -rf -- "$candidate"
+    fi
     rm -rf -- "$stage"
 }
 trap cleanup EXIT
@@ -94,6 +98,7 @@ chmod 0750 "$stage/app/bootstrap/cache"
 if [[ -e $release ]]; then
     rm -rf -- "$release"
 fi
+candidate=$release
 mv "$stage/app" "$release"
 
 # Use only the server's environment file and the web process identity.
@@ -103,10 +108,14 @@ artisan() {
 }
 
 artisan config:cache --no-interaction
+backup=
 if [[ -n $previous ]]; then
-    mysqldump --protocol=socket --single-transaction --quick --no-tablespaces \
-        --set-gtid-purged=OFF hatid | gzip > "$stage/hatid.sql.gz"
-    mv -f "$stage/hatid.sql.gz" "$root/backups/before-deploy.sql.gz"
+    backup="$root/backups/${previous##*/}.sql.gz"
+    if [[ ! -s $backup ]]; then
+        mysqldump --protocol=socket --single-transaction --quick --no-tablespaces \
+            --set-gtid-purged=OFF hatid | gzip > "$stage/hatid.sql.gz"
+        mv "$stage/hatid.sql.gz" "$backup"
+    fi
 fi
 artisan migrate --force --no-interaction
 artisan migrate:status --no-interaction
@@ -132,6 +141,12 @@ fi
 for old in "$root"/releases/*; do
     if [[ $old =~ ^/srv/hatid/releases/[0-9a-f]{40}-[0-9a-f]{64}$ && -d $old && $old != "$release" && $old != "$previous" ]]; then
         rm -rf -- "$old"
+    fi
+done
+
+for old in "$root"/backups/*.sql.gz; do
+    if [[ $old =~ ^/srv/hatid/backups/[0-9a-f]{40}-[0-9a-f]{64}\.sql\.gz$ && $old != "$backup" ]]; then
+        rm -f -- "$old"
     fi
 done
 

@@ -87,6 +87,9 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              - Effect: Deny
+                Action: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:GetParametersByPath']
+                Resource: '*'
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub '${ReleaseBucket.Arn}/releases/*'
