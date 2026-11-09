@@ -38,7 +38,7 @@ MYSQL
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         nginx php8.5-fpm php8.5-cli php8.5-mysql php8.5-mbstring php8.5-xml \
-        php8.5-curl php8.5-zip mysql-server awscli
+        php8.5-curl php8.5-zip mysql-server composer jq
     apt-get clean
     if [[ $(mysql --protocol=socket --batch --skip-column-names -e 'SELECT @@bind_address') != 127.0.0.1 ]]; then
         systemctl restart mysql
@@ -164,6 +164,39 @@ NGINX
     systemctl reload nginx
 }
 
+# Install the pull timer separately from enabling it after the HTTPS smoke check.
+install_release_tools() {
+    local scripts
+    scripts=$(dirname "$0")
+    install -m 0755 "$scripts/release.sh" /usr/local/sbin/hatid-release
+    install -m 0755 "$scripts/pull-release.sh" /usr/local/sbin/hatid-pull-release
+
+    cat > /etc/systemd/system/hatid-api-pull.service <<'UNIT'
+[Unit]
+Description=Deploy the latest verified Hatid API main commit
+After=network-online.target mysql.service nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hatid-pull-release
+TimeoutStartSec=10min
+UNIT
+    cat > /etc/systemd/system/hatid-api-pull.timer <<'TIMER'
+[Unit]
+Description=Check GitHub for verified Hatid API commits
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=3min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+TIMER
+    systemctl daemon-reload
+}
+
 case ${1:-} in
     prepare)
         [[ $# == 1 ]]
@@ -172,16 +205,15 @@ case ${1:-} in
         if [[ ! -f /etc/hatid-release.conf ]] ||
             grep -Fxq 'HATID_ORIGIN=http://127.0.0.1:8080' /etc/hatid-release.conf; then
             write_site
-            printf 'HATID_ORIGIN=http://127.0.0.1:8080\nHATID_RELEASE_BUCKET=\n' > /etc/hatid-release.conf
+            printf 'HATID_ORIGIN=http://127.0.0.1:8080\n' > /etc/hatid-release.conf
             chmod 0600 /etc/hatid-release.conf
         fi
-        install -m 0755 "$(dirname "$0")/release.sh" /usr/local/sbin/hatid-release
+        install_release_tools
         ;;
     https)
-        [[ $# == 3 && $2 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ && $3 =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]
+        [[ $# == 2 && $2 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
         test -f "$env_file"
         ip=$2
-        bucket=$3
         install -d -m 0755 "$acme"
         if [[ ! -x /snap/bin/certbot ]]; then
             snap install --classic certbot
@@ -197,11 +229,11 @@ case ${1:-} in
             (cd "$root/current"; runuser -u www-data -- php8.5 artisan config:cache --no-interaction)
         fi
         write_site "$ip" yes
-        printf 'HATID_ORIGIN=https://%s\nHATID_RELEASE_BUCKET=%s\n' "$ip" "$bucket" > /etc/hatid-release.conf
+        printf 'HATID_ORIGIN=https://%s\n' "$ip" > /etc/hatid-release.conf
         chmod 0600 /etc/hatid-release.conf
         ;;
     *)
-        echo 'Usage: sudo setup-ec2.sh prepare | https ELASTIC_IPV4 RELEASE_BUCKET' >&2
+        echo 'Usage: sudo setup-ec2.sh prepare | https ELASTIC_IPV4' >&2
         exit 2
         ;;
 esac

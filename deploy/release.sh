@@ -4,8 +4,8 @@ umask 027
 
 commit=${1:-}
 digest=${2:-}
-if [[ $EUID != 0 || ! $commit =~ ^[0-9a-f]{40}$ || ! $digest =~ ^[0-9a-f]{64}$ || $# -gt 3 ]]; then
-    echo 'Usage: sudo hatid-release COMMIT SHA256 [LOCAL_ARCHIVE]' >&2
+if [[ $EUID != 0 || ! $commit =~ ^[0-9a-f]{40}$ || ! $digest =~ ^[0-9a-f]{64}$ || $# != 3 ]]; then
+    echo 'Usage: sudo hatid-release COMMIT SHA256 LOCAL_ARCHIVE' >&2
     exit 2
 fi
 
@@ -66,12 +66,7 @@ trap cleanup EXIT
 chgrp www-data "$stage"
 chmod 0750 "$stage"
 
-if [[ $# == 3 ]]; then
-    cp -- "$3" "$stage/release.tar.gz"
-else
-    aws s3 cp "s3://$HATID_RELEASE_BUCKET/releases/$commit-$digest.tar.gz" \
-        "$stage/release.tar.gz" --only-show-errors
-fi
+cp -- "$3" "$stage/release.tar.gz"
 if ! printf '%s  %s\n' "$digest" "$stage/release.tar.gz" | sha256sum --check --status; then
     echo 'Release archive checksum does not match.' >&2
     exit 1

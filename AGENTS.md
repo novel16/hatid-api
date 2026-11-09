@@ -2,7 +2,7 @@
 
 ## EC2 API deployment
 
-The user approved the first API deployment to their existing Sydney EC2 instance and automatic GitHub Actions deployment from main. Use the native Ubuntu PHP 8.5 and MySQL 8.4 packages, build from the lockfile on GitHub, and use a private release bucket plus OIDC and the scoped SSM command. Keep a dedicated server environment and database, MySQL on loopback, and trusted HTTPS on the static public IP. Keep frontend and admin outside this deployment. Preserve the user's existing SSH access, instance size, billing plan and unrelated cloud resources. Do not copy private keys, local database data or secrets into GitHub.
+The user approved API deployment to their existing Sydney EC2 instance and automatic deployment of verified main commits. The AWS account role denied creation of the GitHub OIDC provider. Use GitHub Actions for the full test suite and the EC2 timer for release activation. Read only the exact verified main commit from the public repository. Install locked runtime dependencies as an unprivileged user and reuse the active vendor directory. Keep production secrets on EC2, MySQL on loopback and trusted HTTPS on the Elastic IP. Keep frontend and admin outside this deployment and preserve unrelated resources.
 
 ## Current rider status and activity
 
