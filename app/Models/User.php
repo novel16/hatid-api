@@ -19,7 +19,7 @@ use Laravel\Sanctum\HasApiTokens;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
-    public const VEHICLES = ['motorcycle', 'bicycle', 'car'];
+    public const VEHICLES = ['motorcycle', 'trijet', 'bicycle', 'car'];
 
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;

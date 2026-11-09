@@ -69,10 +69,12 @@ class MapTest extends AuthTestCase
         Http::fake(['api.geoapify.com/*' => Http::response($this->matrix(1), 200)]);
         $this->api('POST', '/api/v1/map/recommendations', $this->origin(), $token)->assertUnprocessable()->assertJsonValidationErrors('vehicle');
         Http::assertNothingSent();
-        foreach (['motorcycle' => 'motorcycle', 'bicycle' => 'bicycle', 'car' => 'drive'] as $vehicle => $mode) {
+        foreach (['motorcycle' => 'motorcycle', 'trijet' => 'drive', 'bicycle' => 'bicycle', 'car' => 'drive'] as $vehicle => $mode) {
             $rider->forceFill(['vehicle' => $vehicle])->save();
             $this->api('POST', '/api/v1/map/recommendations', $this->origin(), $token)->assertOk()->assertJsonPath('data.vehicle', $vehicle);
-            Http::assertSent(/** An independently specified expected mode catches car/provider naming mistakes. */ fn (Request $request): bool => $request['mode'] === $mode);
+            $avoid = $vehicle === 'trijet' ? [['type' => 'highways']] : null;
+            Http::assertSent(/** Distinguish the sidecar's road preferences from a car's route. */ fn (Request $request): bool => $request['mode'] === $mode
+                && ($request['avoid'] ?? null) === $avoid);
         }
         $this->api('POST', '/api/v1/map/recommendations', [...$this->origin(), 'mode' => 'truck'], $token)
             ->assertUnprocessable()->assertJsonValidationErrors('mode');

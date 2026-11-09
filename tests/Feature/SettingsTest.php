@@ -17,14 +17,14 @@ class SettingsTest extends AuthTestCase
         $other = $this->account();
         $token = $this->token($user);
         $this->api('GET', '/api/v1/auth/me', token: $token)->assertOk()->assertJsonPath('data.vehicle', null);
-        foreach (['bicycle', 'car', 'motorcycle'] as $vehicle) {
+        foreach (['bicycle', 'car', 'motorcycle', 'trijet'] as $vehicle) {
             $this->api('PATCH', '/api/v1/settings', ['vehicle' => $vehicle], $token)->assertOk()->assertJsonPath('data.vehicle', $vehicle);
         }
         foreach ([null, '', 'truck', ['car']] as $invalid) {
             $this->api('PATCH', '/api/v1/settings', ['vehicle' => $invalid], $token)
                 ->assertUnprocessable()->assertJsonValidationErrors('vehicle');
         }
-        $this->api('GET', '/api/v1/auth/me', token: $token)->assertOk()->assertJsonPath('data.vehicle', 'motorcycle');
+        $this->api('GET', '/api/v1/auth/me', token: $token)->assertOk()->assertJsonPath('data.vehicle', 'trijet');
         $this->assertNull($other->fresh()->vehicle);
         $this->assertTrue($user->fresh()->settingPreferences()['deliveryAlerts']);
     }

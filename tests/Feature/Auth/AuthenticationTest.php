@@ -20,10 +20,10 @@ class AuthenticationTest extends AuthTestCase
         $this->api('POST', '/api/v1/auth/register', $values)->assertUnprocessable()->assertJsonValidationErrors('vehicle');
         $this->api('POST', '/api/v1/auth/register', [...$values, 'vehicle' => 'spaceship'])
             ->assertUnprocessable()->assertJsonValidationErrors('vehicle');
-        $result = $this->api('POST', '/api/v1/auth/register', [...$values, 'vehicle' => 'motorcycle'])
-            ->assertCreated()->assertJsonPath('data.user.vehicle', 'motorcycle');
+        $result = $this->api('POST', '/api/v1/auth/register', [...$values, 'vehicle' => 'trijet'])
+            ->assertCreated()->assertJsonPath('data.user.vehicle', 'trijet');
         $this->api('GET', '/api/v1/auth/me', token: $result->json('data.access_token'))
-            ->assertOk()->assertJsonPath('data.vehicle', 'motorcycle');
+            ->assertOk()->assertJsonPath('data.vehicle', 'trijet');
     }
 
     /** @return array<string, array{string, string, array<string>}> */

@@ -23,8 +23,15 @@ final class MapService
     /** Compare only five current owned physical stops, then rank real returned time and road distance. */
     public function recommend(User $rider, array $origin): array
     {
-        $modes = ['motorcycle' => 'motorcycle', 'bicycle' => 'bicycle', 'car' => 'drive'];
-        if (! isset($modes[$rider->vehicle ?? ''])) {
+        $profiles = [
+            'motorcycle' => ['mode' => 'motorcycle'],
+            // A motorcycle with a sidecar uses regular road routing with highway avoidance.
+            'trijet' => ['mode' => 'drive', 'avoid' => [['type' => 'highways']]],
+            'bicycle' => ['mode' => 'bicycle'],
+            'car' => ['mode' => 'drive'],
+        ];
+        $profile = $profiles[$rider->vehicle ?? ''] ?? null;
+        if ($profile === null) {
             throw ValidationException::withMessages(['vehicle' => 'Choose your primary vehicle in Settings before requesting road recommendations.']);
         }
         // ponytail: scan this rider's ready work; use a spatial query if measured directory volume warrants it.
@@ -40,7 +47,7 @@ final class MapService
             return $this->status($rider);
         }
         $cells = $this->provider->matrix([
-            'mode' => $modes[$rider->vehicle], 'units' => 'metric', 'traffic' => 'free_flow',
+            ...$profile, 'units' => 'metric', 'traffic' => 'free_flow',
             'sources' => [['location' => [round((float) $origin['longitude'], 6), round((float) $origin['latitude'], 6)]]],
             /** Provider payloads contain only coordinates, never customer identity or parcel finances. */
             'targets' => $groups->map(fn (Collection $parcels): array => ['location' => [
