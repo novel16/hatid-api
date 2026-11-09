@@ -1,5 +1,9 @@
 # Hatid API development rules
 
+## EC2 API deployment
+
+The user approved the first API deployment to their existing Sydney EC2 instance and automatic GitHub Actions deployment from main. Use the native Ubuntu PHP 8.5 and MySQL 8.4 packages, build from the lockfile on GitHub, and use a private release bucket plus OIDC and the scoped SSM command. Keep a dedicated server environment and database, MySQL on loopback, and trusted HTTPS on the static public IP. Keep frontend and admin outside this deployment. Preserve the user's existing SSH access, instance size, billing plan and unrelated cloud resources. Do not copy private keys, local database data or secrets into GitHub.
+
 ## Current rider status and activity
 
 The approved Suspend and Reactivate feature adds rider status and append-only activity in one additive migration. Keep admin Bearer role and ability checks. Use the same locked rider row as login, require the expected revision and a reason, and commit status, token revocation and the activity record together. Reject suspended rider access in login and role middleware. Verify transitions on isolated fixtures and preserve native account records and running servers. API main publishing remains authorized.
