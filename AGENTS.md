@@ -1,5 +1,9 @@
 # Hatid API development rules
 
+## Current rider status and activity
+
+The approved Suspend and Reactivate feature adds rider status and append-only activity in one additive migration. Keep admin Bearer role and ability checks. Use the same locked rider row as login, require the expected revision and a reason, and commit status, token revocation and the activity record together. Reject suspended rider access in login and role middleware. Verify transitions on isolated fixtures and preserve native account records and running servers. API main publishing remains authorized.
+
 ## Current Admin Rider Directory
 
 Use a protected `GET /api/v1/admin/riders` for the approved read-only directory. Reuse admin Bearer role and ability checks. Scope the query to riders, validate search, vehicle and the 10/50/100 page sizes, and serialize only the approved profile fields through a Resource collection. Keep account status changes in their separate feature. Existing API main publishing authorization applies. Run sequential checks with isolated test data.

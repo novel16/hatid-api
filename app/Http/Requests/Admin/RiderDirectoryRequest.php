@@ -16,14 +16,26 @@ class RiderDirectoryRequest extends FormRequest
         return true;
     }
 
-    /** Bound search and paging and allow a filter for profiles with no vehicle. */
+    /** Validate list filters, history paging and the confirmed status revision. */
     public function rules(): array
     {
-        return [
-            'q' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'vehicle' => ['sometimes', 'nullable', 'string', Rule::in([...User::VEHICLES, 'unset'])],
-            'page' => ['sometimes', 'integer', 'between:1,2147483647'],
-            'per_page' => ['sometimes', 'integer', Rule::in([10, 50, 100])],
-        ];
+        $page = ['sometimes', 'integer', 'between:1,2147483647'];
+        $statuses = Rule::in(['active', 'suspended']);
+
+        return match ($this->route()->getActionMethod()) {
+            'index' => [
+                'q' => ['sometimes', 'nullable', 'string', 'max:100'],
+                'vehicle' => ['sometimes', 'nullable', 'string', Rule::in([...User::VEHICLES, 'unset'])],
+                'status' => ['sometimes', 'nullable', 'string', $statuses],
+                'page' => $page,
+                'per_page' => ['sometimes', 'integer', Rule::in([10, 50, 100])],
+            ],
+            'activity' => ['page' => $page],
+            'updateStatus' => [
+                'status' => ['required', 'string', $statuses],
+                'reason' => ['required', 'string', 'max:500'],
+                'expected_revision' => ['required', 'integer', 'between:0,4294967294'],
+            ],
+        };
     }
 }

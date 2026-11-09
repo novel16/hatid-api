@@ -21,6 +21,9 @@ class RiderResource extends JsonResource
             'phone' => $this->phone,
             'vehicle' => $this->vehicle,
             'created_at' => $this->created_at?->toISOString(),
+            'status' => $this->isSuspendedRider() ? 'suspended' : 'active',
+            'status_revision' => $this->rider_status_revision,
+            'suspended_at' => $this->suspended_at?->toISOString(),
         ];
     }
 }

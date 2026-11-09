@@ -38,13 +38,16 @@ final class AuthService
         });
     }
 
+    /** Verify credentials and status on the locked account before issuing a token. */
     public function login(
         string $email,
         #[SensitiveParameter] string $password,
         string $deviceName,
         UserRole $role,
     ): NewAccessToken {
+        /** Preserve the credential timing guard for every login outcome. */
         return $this->timebox->call(function () use ($email, $password, $deviceName, $role): NewAccessToken {
+            /** Serialize token issuance with administrator status changes. */
             return DB::transaction(function () use ($email, $password, $deviceName, $role): NewAccessToken {
                 $user = User::query()
                     ->where('email', User::normalizeEmail($email))
@@ -54,6 +57,12 @@ final class AuthService
                 if (! $user || ! Hash::check($password, $user->password) || $user->role !== $role) {
                     throw ValidationException::withMessages([
                         'email' => ['The provided credentials are incorrect.'],
+                    ]);
+                }
+
+                if ($user->isSuspendedRider()) {
+                    throw ValidationException::withMessages([
+                        'email' => ['This rider account is suspended. Contact your Hatid administrator.'],
                     ]);
                 }
 

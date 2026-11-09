@@ -27,6 +27,12 @@ class User extends Authenticatable
     /** @var array<string, mixed> */
     protected $attributes = ['role' => 'rider'];
 
+    /** A suspension applies to rider access regardless of the presented token. */
+    public function isSuspendedRider(): bool
+    {
+        return $this->role === UserRole::Rider && $this->suspended_at !== null;
+    }
+
     /** Provides the owner's customer scope for every directory operation. */
     public function customers(): HasMany
     {
@@ -82,6 +88,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'preferences' => 'array',
+            'suspended_at' => 'datetime',
+            'rider_status_revision' => 'integer',
         ];
     }
 }

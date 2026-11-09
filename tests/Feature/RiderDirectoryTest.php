@@ -49,7 +49,7 @@ class RiderDirectoryTest extends AuthTestCase
             ->assertHeaderMissing('Set-Cookie');
 
         $this->assertEqualsCanonicalizing(
-            ['id', 'name', 'email', 'phone', 'vehicle', 'created_at'],
+            ['id', 'name', 'email', 'phone', 'vehicle', 'created_at', 'status', 'status_revision', 'suspended_at'],
             array_keys($response->json('data.0')),
         );
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));

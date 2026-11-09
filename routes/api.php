@@ -85,11 +85,13 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth.no-store')->group(functio
     Route::prefix('admin')->name('admin.')->group(function () use ($authenticatedRoutes): void {
         Route::post('auth/login', [AuthController::class, 'adminLogin'])->middleware('throttle:login')->name('auth.login');
 
-        /** Require the same administrator role and token scope for auth and directory reads. */
+        /** Require the same administrator role and token scope for all workspace actions. */
         Route::middleware(['auth:sanctum', 'role:admin', 'abilities:admin:access', 'throttle:authenticated'])
             ->group(function () use ($authenticatedRoutes): void {
                 Route::prefix('auth')->name('auth.')->group($authenticatedRoutes);
                 Route::get('riders', [RiderController::class, 'index'])->name('riders.index');
+                Route::get('riders/{rider}/activity', [RiderController::class, 'activity'])->whereNumber('rider')->name('riders.activity');
+                Route::patch('riders/{rider}/status', [RiderController::class, 'updateStatus'])->whereNumber('rider')->name('riders.status');
             });
     });
 });
