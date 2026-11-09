@@ -4,9 +4,15 @@ umask 027
 
 commit=${1:-}
 digest=${2:-}
-if [[ $EUID != 0 || ! $commit =~ ^[0-9a-f]{40}$ || ! $digest =~ ^[0-9a-f]{64}$ || $# != 3 ]]; then
-    echo 'Usage: sudo hatid-release COMMIT SHA256 LOCAL_ARCHIVE' >&2
+if [[ $EUID != 0 ]]; then
+    echo 'Run the Hatid release helper with sudo.' >&2
     exit 2
+fi
+if [[ $# != 1 || $commit != --recover ]]; then
+    if [[ $# != 3 || ! $commit =~ ^[0-9a-f]{40}$ || ! $digest =~ ^[0-9a-f]{64}$ ]]; then
+        echo 'Usage: sudo hatid-release COMMIT SHA256 LOCAL_ARCHIVE | --recover' >&2
+        exit 2
+    fi
 fi
 
 root=/srv/hatid
@@ -14,6 +20,48 @@ root=/srv/hatid
 source /etc/hatid-release.conf
 exec 9>"$root/deploy.lock"
 flock -n 9
+
+# Check the configured hostname and certificate while connecting to this host.
+healthy() {
+    local status
+    status=$(curl --noproxy '*' --connect-to '::127.0.0.1:' --silent --show-error \
+        --max-time 8 -o /dev/null -w '%{http_code}' "$HATID_ORIGIN/up") || return 1
+    [[ $status == 200 ]]
+}
+
+# Accept a release pointer only when it resolves to an owned release directory.
+read_release() {
+    local link="$root/$1" path
+    [[ -e $link || -L $link ]] || return 0
+    path=$(readlink -e "$link")
+    if [[ ! -L $link || ! -d $path || ! $path =~ ^/srv/hatid/releases/[0-9a-f]{40}-[0-9a-f]{64}$ ]]; then
+        echo 'The release pointer is invalid.' >&2
+        return 1
+    fi
+    printf '%s' "$path"
+}
+
+# Replace a pointer atomically on the same filesystem.
+set_release() {
+    ln -sfn "$2" "$root/.next-$1"
+    mv -Tf "$root/.next-$1" "$root/$1"
+}
+
+previous=$(read_release current)
+verified=$(read_release verified)
+if [[ $previous != "$verified" ]]; then
+    if [[ -n $previous ]] && healthy; then
+        set_release verified "$previous"
+    elif [[ -n $verified ]]; then
+        set_release current "$verified"
+        previous=$verified
+        echo 'Restored the last verified release after an interrupted activation.'
+    else
+        unlink "$root/current"
+        previous=
+    fi
+fi
+[[ $commit != --recover ]] || exit 0
 
 grep -Fxq 'APP_ENV=production' "$root/shared/.env"
 grep -Fxq 'DB_DATABASE=hatid' "$root/shared/.env"
@@ -24,23 +72,6 @@ if grep -qE '^DB_URL=.+' "$root/shared/.env"; then
 fi
 
 release="$root/releases/$commit-$digest"
-previous=
-if [[ -e $root/current || -L $root/current ]]; then
-    previous=$(readlink -e "$root/current")
-    if [[ ! -L $root/current || ! $previous =~ ^/srv/hatid/releases/[0-9a-f]{40}-[0-9a-f]{64}$ ]]; then
-        echo 'The current release points outside Hatid releases.' >&2
-        exit 1
-    fi
-fi
-
-# Check the configured hostname and certificate while connecting to this host.
-healthy() {
-    local status
-    status=$(curl --noproxy '*' --connect-to '::127.0.0.1:' --silent --show-error \
-        --max-time 8 -o /dev/null -w '%{http_code}' "$HATID_ORIGIN/up") || return 1
-    [[ $status == 200 ]]
-}
-
 if [[ $previous == "$release" ]]; then
     healthy
     printf 'Release %s is already active.\n' "$commit"
@@ -115,22 +146,17 @@ fi
 artisan migrate --force --no-interaction
 artisan migrate:status --no-interaction
 
-# Switch the symlink atomically so requests see one complete release.
-activate() {
-    ln -s "$1" "$stage/current"
-    mv -Tf "$stage/current" "$root/current"
-}
-
-activate "$release"
+set_release current "$release"
 if ! healthy; then
     if [[ -n $previous ]]; then
-        activate "$previous"
+        set_release current "$previous"
     else
         unlink "$root/current"
     fi
     echo 'The release failed its health check. The previous web release was restored if present.' >&2
     exit 1
 fi
+set_release verified "$release"
 
 # Keep the active and previous code releases within the small EC2 disk budget.
 for old in "$root"/releases/*; do

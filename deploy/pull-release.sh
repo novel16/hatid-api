@@ -8,6 +8,11 @@ api=https://api.github.com/repos/novel16/hatid-api
 exec 9>"$root/pull.lock"
 flock -n 9 || exit 0
 
+# Finish or revert an interrupted activation even if GitHub is unavailable.
+if [[ $(readlink "$root/current" || true) != $(readlink "$root/verified" || true) ]]; then
+    /usr/local/sbin/hatid-release --recover
+fi
+
 # Read only the live main reference from GitHub over TLS.
 main_commit() {
     curl -fsS --proto '=https' --max-time 15 "$api/git/ref/heads/main" |
@@ -80,9 +85,7 @@ runuser -u nobody -- env -i PATH=/usr/bin:/bin LANG=C.UTF-8 \
 bundle="$stage/release.tar.gz"
 tar -czf "$bundle" -C "$source_dir" .
 read -r digest _ < <(sha256sum "$bundle")
-if ! /usr/local/sbin/hatid-release "$commit" "$digest" "$bundle"; then
-    # A rerun or a newer main push can retry after an operator checks the journal.
-    printf '%s\n' "$run_key" > "$failure"
-    exit 1
-fi
+# Hold this run if activation fails or the service is interrupted.
+printf '%s\n' "$run_key" > "$failure"
+/usr/local/sbin/hatid-release "$commit" "$digest" "$bundle"
 rm -f -- "$failure"
